@@ -42,29 +42,6 @@ function creaPannello(w, h, d, x, y, z, color) {
     scene.add(line);
 }
 
-function creaAntaSagomata(xLeft, yBottom, zBack, w, hL, hR, spessore, color) {
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(w, 0);
-    shape.lineTo(w, hR);
-    shape.lineTo(0, hL);
-    shape.closePath();
-
-    const extrudeSettings = { depth: spessore, bevelEnabled: false };
-    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    const material = new THREE.MeshPhongMaterial({ color: color });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "pezzoModello";
-    mesh.position.set(xLeft, yBottom, zBack);
-    scene.add(mesh);
-
-    const edges = new THREE.EdgesGeometry(geometry);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
-    line.name = "pezzoModello";
-    line.position.set(xLeft, yBottom, zBack);
-    scene.add(line);
-}
-
 function aggiornaInterfacciaAccessori(moduliData, passoCassetto, profondita) {
     if (moduliData.length === numeroModuliAttuale) {
         moduliData.forEach((mod, i) => {
@@ -123,9 +100,7 @@ function aggiornaInterfacciaAccessori(moduliData, passoCassetto, profondita) {
 function generaArmadio() {
     pulisciScena();
 
-    // Lettura dei nuovi parametri
     const piantaScala = document.getElementById('piantaScala')?.value || 'Lineare';
-    const tipoStruttura = document.getElementById('tipoStruttura').value;
     const pedataIn = parseFloat(document.getElementById('pedata').value) || 250;
     const alzataIn = parseFloat(document.getElementById('alzata').value) || 180;
     const larghezzaRampa = parseFloat(document.getElementById('larghezzaRampa').value) || 800;
@@ -136,41 +111,85 @@ function generaArmadio() {
     const colorEst = document.getElementById('coloreEsterno').value;
     const showAnte = document.getElementById('showAnte').checked;
 
-    const profondita = 600; // L'armadio rimane fisso a 600mm
+    const profondita = 600; 
     const spessore = 19;
     const hZoccolo = 45;
     const spessoreSchienale = 5;
     const aria = 3;
     const passoCassetto = 160;
+    const spessoreLegnoScala = 40.6;
 
-    // --- FUNZIONE DI SUPPORTO: Calcolo del tetto massimo ---
-    // Restituisce l'altezza Y esatta del limite sotto la scala (con aria 5mm) per un dato X
+    // ALIGNMENT Z: L'armadio è a filo col fronte della scala (larghezzaRampa)
+    const zFrontaleArmadio = larghezzaRampa; 
+    const zStartAnteExtrude = zFrontaleArmadio - spessore; // Per la generazione dei poligoni
+    const zCenterAnte = zFrontaleArmadio - (spessore / 2); // Per i pannelli standard
+    const zCenterCassa = zFrontaleArmadio - spessore - (profondita / 2);
+    const zCenterSchienale = zFrontaleArmadio - spessore - profondita + (spessoreSchienale / 2);
+
+    // FUNZIONE DI SUPPORTO: Trova l'altezza sicura (-5mm) sotto i gradini per un dato punto X
     function getSafeTopY(x) {
-        if (x <= larghezzaUltimaPedata) return (numeroPedate * alzataIn) - 5;
-        let diff = x - larghezzaUltimaPedata;
-        let k = 1 + Math.floor((diff - 0.1) / pedataIn);
-        if (k > numeroPedate - 1) k = numeroPedate - 1;
-        return ((numeroPedate - k) * alzataIn) - 5;
+        let calcX = Math.max(0, x);
+        let k = 0;
+        if (calcX > larghezzaUltimaPedata) {
+            k = 1 + Math.floor((calcX - larghezzaUltimaPedata) / pedataIn);
+        }
+        if (k >= numeroPedate) k = numeroPedate - 1;
+        return (numeroPedate - k) * alzataIn - spessoreLegnoScala - 5;
     }
 
-    // --- LOGICA MODULI ---
-    const moduliData = [];
-    
-    // Modulo 1 (Sotto l'ultima pedata in alto a sinistra)
-    const hSafeMod0 = getSafeTopY(larghezzaUltimaPedata) - 60; 
-    moduliData.push({ w: larghezzaUltimaPedata, h: hSafeMod0 });
-
-    // Moduli centrali (Sottraggo la pedata speciale e le 2 pedate vuote in fondo)
-    const middleTreads = numeroPedate - 3; 
-    if (middleTreads > 0) {
-        const numMiddleModules = Math.ceil(middleTreads / 2); // 1 modulo ogni 2 gradini circa
-        const wMid = (middleTreads * pedataIn) / numMiddleModules;
-        let curX = larghezzaUltimaPedata;
-        for (let i = 0; i < numMiddleModules; i++) {
-            let endX = curX + wMid;
-            moduliData.push({ w: wMid, h: getSafeTopY(endX) - 60 });
-            curX += wMid;
+    // FUNZIONE DI SUPPORTO: Disegna un pannello sagomato che segue perfettamente i gradini in alto
+    function creaPannelloZigZag(xStart, xEnd, yBottom, zPos, depth, color) {
+        const pts = [];
+        pts.push(new THREE.Vector2(xStart, yBottom));
+        pts.push(new THREE.Vector2(xEnd, yBottom));
+        
+        let cx = xEnd;
+        let topY = getSafeTopY(cx - 0.1); // -0.1 per prendere il soffitto prima dello scalino
+        pts.push(new THREE.Vector2(cx, topY));
+        
+        // Traccia al contrario trovando i cambi di gradino (alzate)
+        if (cx > larghezzaUltimaPedata) {
+            let j = Math.floor((cx - larghezzaUltimaPedata - 0.1) / pedataIn);
+            let currRiserX = larghezzaUltimaPedata + j * pedataIn;
+            
+            while (currRiserX > xStart + 0.1) {
+                pts.push(new THREE.Vector2(currRiserX, topY));
+                topY = getSafeTopY(currRiserX - 0.1);
+                pts.push(new THREE.Vector2(currRiserX, topY));
+                j--;
+                currRiserX = larghezzaUltimaPedata + j * pedataIn;
+            }
         }
+        pts.push(new THREE.Vector2(xStart, topY));
+        
+        const shape = new THREE.Shape(pts);
+        const extrudeSettings = { depth: depth, bevelEnabled: false };
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const material = new THREE.MeshPhongMaterial({ color: color });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = "pezzoModello";
+        mesh.position.set(0, 0, zPos);
+        scene.add(mesh);
+        
+        const edges = new THREE.EdgesGeometry(geometry, 20);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
+        line.name = "pezzoModello";
+        line.position.set(0, 0, zPos);
+        scene.add(line);
+    }
+
+    // --- LOGICA MODULI (Esattamente 2 pedate per modulo) ---
+    const moduliData = [];
+    const numModuli = Math.max(0, Math.floor(numeroPedate / 2) - 1);
+    let curX = 0;
+
+    for (let i = 0; i < numModuli; i++) {
+        let wMod = (i === 0) ? (larghezzaUltimaPedata + pedataIn) : (2 * pedataIn);
+        let endX = curX + wMod;
+        let safeY = getSafeTopY(endX); 
+        let hMod = safeY - 60; // 60mm di aria per il tamponamento superiore
+        moduliData.push({ w: wMod, h: hMod });
+        curX += wMod;
     }
 
     aggiornaInterfacciaAccessori(moduliData, passoCassetto, profondita);
@@ -186,7 +205,6 @@ function generaArmadio() {
         
         const checkboxReggiabiti = document.getElementById(`reggiabiti-mod-${i}`);
         const labelReggiabiti = document.getElementById(`label-reggiabiti-${i}`);
-
         const altezzaBaseUtile = (numCassetti > 0) ? (8 + (numCassetti * passoCassetto)) : (hZoccolo + spessore);
         const luceInterna = (hCorrente - spessore) - altezzaBaseUtile;
 
@@ -202,141 +220,138 @@ function generaArmadio() {
         }
 
         // Casse e Schiene
-        creaPannello(spessore, hCorrente, profondita, startX + (spessore / 2), hCorrente / 2, profondita / 2, colorInt);
-        creaPannello(spessore, hCorrente, profondita, startX + larghezzaModulo - (spessore / 2), hCorrente / 2, profondita / 2, colorInt);
-        creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hCorrente - (spessore / 2), profondita / 2, colorInt);
-        creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hZoccolo + (spessore / 2), profondita / 2, colorInt);
-        creaPannello(wInterno, hZoccolo, spessore, startX + (larghezzaModulo / 2), hZoccolo / 2, profondita - 5 - (spessore / 2), colorInt);
-        
-        const hSchienale = hCorrente - (spessore * 2) - hZoccolo;
-        creaPannello(wInterno, hSchienale, spessoreSchienale, startX + (larghezzaModulo / 2), hZoccolo + spessore + (hSchienale / 2), 10 + (spessoreSchienale / 2), colorInt);
+        creaPannello(spessore, hCorrente, profondita, startX + (spessore / 2), hCorrente / 2, zCenterCassa, colorInt);
+        creaPannello(spessore, hCorrente, profondita, startX + larghezzaModulo - (spessore / 2), hCorrente / 2, zCenterCassa, colorInt);
+        creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hCorrente - (spessore / 2), zCenterCassa, colorInt);
+        creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hZoccolo + (spessore / 2), zCenterCassa, colorInt);
+        creaPannello(wInterno, hZoccolo, spessore, startX + (larghezzaModulo / 2), hZoccolo / 2, zCenterCassa + profondita/2 - 20, colorInt); // Zoccolo arretrato
+        creaPannello(wInterno, hCorrente - (spessore * 2) - hZoccolo, spessoreSchienale, startX + (larghezzaModulo / 2), hZoccolo + spessore + ((hCorrente - (spessore * 2) - hZoccolo) / 2), zCenterSchienale, colorInt);
 
         // Ripiani e Cassetti
         if (numCassetti > 0) {
-            const altezzaBaseRipiano = 8 + (numCassetti * passoCassetto);
-            creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), altezzaBaseRipiano - (spessore / 2), profondita / 2, colorInt);
+            const hRipiano = 8 + (numCassetti * passoCassetto);
+            creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hRipiano - (spessore / 2), zCenterCassa, colorInt);
         }
 
         // Reggiabiti
         if (checkboxReggiabiti && checkboxReggiabiti.checked) {
             const coloreReggiabiti = 0x999999;
-            const wSostegno = 12, hSostegno = 63, dSostegno = 19;
-            const wSbarra = wInterno - 24, hSbarra = 30, dSbarra = 7;
+            const wSostegno = 12, hSostegno = 63, dSostegno = 19, wSbarra = wInterno - 24, hSbarra = 30, dSbarra = 7;
             const ySostegno = hCorrente - spessore - (hSostegno / 2);
-            creaPannello(wSostegno, hSostegno, dSostegno, startX + spessore + (wSostegno / 2), ySostegno, profondita / 2, coloreReggiabiti);
-            creaPannello(wSostegno, hSostegno, dSostegno, startX + larghezzaModulo - spessore - (wSostegno / 2), ySostegno, profondita / 2, coloreReggiabiti);
-            const ySbarra = (hCorrente - spessore - hSostegno) + (hSbarra / 2);
-            creaPannello(wSbarra, hSbarra, dSbarra, startX + (larghezzaModulo / 2), ySbarra, profondita / 2, coloreReggiabiti);
+            creaPannello(wSostegno, hSostegno, dSostegno, startX + spessore + (wSostegno / 2), ySostegno, zCenterCassa, coloreReggiabiti);
+            creaPannello(wSostegno, hSostegno, dSostegno, startX + larghezzaModulo - spessore - (wSostegno / 2), ySostegno, zCenterCassa, coloreReggiabiti);
+            creaPannello(wSbarra, hSbarra, dSbarra, startX + (larghezzaModulo / 2), (hCorrente - spessore - hSostegno) + (hSbarra / 2), zCenterCassa, coloreReggiabiti);
         }
 
-        // Ante e Frontali
-        if (showAnte) {
+        // Frontali Cassetti (Le ante vengono gestite dopo)
+        if (showAnte && numCassetti > 0) {
             const wFrontale = larghezzaModulo - aria;
-            let yOccupataDaCassetti = 0;
+            let yOccupata = 0;
             for (let j = 0; j < numCassetti; j++) {
-                const hFrontaleCassetto = passoCassetto - aria; 
-                const yPos = 8 + yOccupataDaCassetti + (hFrontaleCassetto / 2);
-                creaPannello(wFrontale, hFrontaleCassetto, spessore, startX + (larghezzaModulo / 2), yPos, profondita + (spessore / 2), colorEst);
-                yOccupataDaCassetti += passoCassetto; 
-            }
-
-            const xLeft = startX + (aria / 2);
-            const yStartAnta = 8 + yOccupataDaCassetti;
-            const hLeft = getSafeTopY(xLeft) - 20 - yStartAnta;
-            const hRight = getSafeTopY(xLeft + wFrontale) - 20 - yStartAnta;
-
-            if (hLeft > 0 && hRight > 0) { 
-                creaAntaSagomata(xLeft, yStartAnta, profondita, wFrontale, hLeft, hRight, spessore, colorEst);
+                const hFrontale = passoCassetto - aria; 
+                creaPannello(wFrontale, hFrontale, spessore, startX + (larghezzaModulo / 2), 8 + yOccupata + (hFrontale / 2), zCenterAnte, colorEst);
+                yOccupata += passoCassetto; 
             }
         }
         startX += larghezzaModulo;
     }
 
-    // --- ANTA DI CHIUSURA (Buco Finale per le prime due pedate in basso) ---
-    const wBuco = 2 * pedataIn;
-    if (showAnte) {
-        const xLeftBuco = startX + aria/2;
-        const wFrontaleBuco = wBuco - aria;
-        const hLeftBuco = getSafeTopY(xLeftBuco) - 20;
-        const hRightBuco = getSafeTopY(xLeftBuco + wFrontaleBuco) - 20;
-
-        if (hLeftBuco > 0) {
-            creaAntaSagomata(xLeftBuco, 8, profondita, wFrontaleBuco, hLeftBuco, hRightBuco, spessore, colorEst);
-        }
-    }
-    const xEndTotal = startX + wBuco;
-
-    // --- TAMPONAMENTO SUPERIORE (L Unica Continua) ---
-    if (tipoStruttura === 'Lineare') {
-        const pts = [];
-        pts.push(new THREE.Vector2(0, moduliData[0].h));
+    // --- TAMPONAMENTO SUPERIORE DEI MODULI (L Continua) ---
+    if (moduliData.length > 0) {
+        let endXModuli = startX;
+        const ptsL = [];
+        ptsL.push(new THREE.Vector2(0, moduliData[0].h));
         
         let cx = 0;
         for (let i = 0; i < moduliData.length; i++) {
-            let x1 = cx;
-            let x2 = cx + moduliData[i].w;
+            let nextX = cx + moduliData[i].w;
             let y = moduliData[i].h;
-            if (i > 0) pts.push(new THREE.Vector2(x1, moduliData[i-1].h));
-            pts.push(new THREE.Vector2(x1, y));
-            pts.push(new THREE.Vector2(x2, y));
-            cx += moduliData[i].w;
+            if (i > 0) ptsL.push(new THREE.Vector2(cx, moduliData[i-1].h));
+            ptsL.push(new THREE.Vector2(cx, y));
+            ptsL.push(new THREE.Vector2(nextX, y));
+            cx = nextX;
         }
 
-        let changes = [];
-        for (let k = numeroPedate - 2; k >= 1; k--) {
-            let chX = larghezzaUltimaPedata + k * pedataIn - 5;
-            if (chX < cx && chX > 0) changes.push(chX);
-        }
-
-        let last_top_y = getSafeTopY(cx);
-        pts.push(new THREE.Vector2(cx, last_top_y));
-
-        for (let i = 0; i < changes.length; i++) {
-            let chX = changes[i];
-            pts.push(new THREE.Vector2(chX, last_top_y));
-            let new_y = getSafeTopY(chX - 0.1);
-            pts.push(new THREE.Vector2(chX, new_y));
-            last_top_y = new_y;
-        }
-        pts.push(new THREE.Vector2(0, last_top_y));
-
-        const shape = new THREE.Shape(pts);
-        const extrudeSettings = { depth: spessore, bevelEnabled: false };
-        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshPhongMaterial({ color: colorInt });
+        let topY = getSafeTopY(cx - 0.1);
+        ptsL.push(new THREE.Vector2(cx, topY));
         
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.name = "pezzoModello";
-        mesh.position.set(0, 0, profondita - spessore); 
-        scene.add(mesh);
-        
-        const edges = new THREE.EdgesGeometry(geometry, 20);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
-        line.name = "pezzoModello";
-        line.position.set(0, 0, profondita - spessore);
-        scene.add(line);
+        if (cx > larghezzaUltimaPedata) {
+            let j = Math.floor((cx - larghezzaUltimaPedata - 0.1) / pedataIn);
+            let currRiserX = larghezzaUltimaPedata + j * pedataIn;
+            while (currRiserX > 0.1) {
+                ptsL.push(new THREE.Vector2(currRiserX, topY));
+                topY = getSafeTopY(currRiserX - 0.1);
+                ptsL.push(new THREE.Vector2(currRiserX, topY));
+                j--;
+                currRiserX = larghezzaUltimaPedata + j * pedataIn;
+            }
+        }
+        ptsL.push(new THREE.Vector2(0, topY));
+
+        const shapeL = new THREE.Shape(ptsL);
+        const extrudeL = new THREE.ExtrudeGeometry(shapeL, { depth: spessore, bevelEnabled: false });
+        const meshL = new THREE.Mesh(extrudeL, new THREE.MeshPhongMaterial({ color: colorInt }));
+        meshL.name = "pezzoModello";
+        meshL.position.set(0, 0, zStartAnteExtrude); 
+        scene.add(meshL);
+        const lineL = new THREE.LineSegments(new THREE.EdgesGeometry(extrudeL, 20), new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
+        lineL.name = "pezzoModello";
+        lineL.position.set(0, 0, zStartAnteExtrude);
+        scene.add(lineL);
     }
 
-    // --- COSTRUZIONE GRADINI E ALZATE (LARGHEZZA RAMPA) ---
-    const spessoreLegnoScala = 40.6;
+    // --- ANTE MODULI (Da sopra i cassetti fino in cima al modulo) ---
+    if (showAnte) {
+        let cxAnte = 0;
+        for (let i = 0; i < moduliData.length; i++) {
+            const mod = moduliData[i];
+            const numCassetti = parseInt(document.getElementById(`cassetti-mod-${i}`)?.value) || 0;
+            const yOccupata = (numCassetti > 0) ? (numCassetti * passoCassetto) : 0;
+            const wFrontale = mod.w - aria;
+            const hAnta = mod.h - 8 - yOccupata - aria/2;
+            
+            if (hAnta > 0) {
+                creaPannello(wFrontale, hAnta, spessore, cxAnte + (mod.w / 2), 8 + yOccupata + (hAnta / 2), zCenterAnte, colorEst);
+            }
+            cxAnte += mod.w;
+        }
+    }
+
+    // --- TAMPONAMENTO FINALE (IL "BUCO" RIMANENTE) ---
+    const totalStairWidth = larghezzaUltimaPedata + (numeroPedate - 1) * pedataIn;
+    if (showAnte && startX < totalStairWidth) {
+        const xStartBuco = startX + aria/2;
+        const xEndBuco = totalStairWidth - aria/2;
+        if (xEndBuco > xStartBuco) {
+            creaPannelloZigZag(xStartBuco, xEndBuco, 8, zStartAnteExtrude, spessore, colorEst);
+        }
+    }
+
+    // --- COSTRUZIONE GRADINI E ALZATE (Incastro Geometrico Perfetto) ---
     const coloreScala = 0x966F33; 
     let currentXScala = 0;
 
     for (let k = 0; k < numeroPedate; k++) {
         let wStep = (k === 0) ? larghezzaUltimaPedata : pedataIn;
         let topYScala = (numeroPedate - k) * alzataIn;
-
-        creaPannello(wStep + spessoreLegnoScala, spessoreLegnoScala, larghezzaRampa, currentXScala + wStep/2, topYScala + spessoreLegnoScala/2, larghezzaRampa/2, coloreScala);
-
-        if (k < numeroPedate - 1) {
-            let hAlz = alzataIn - spessoreLegnoScala;
-            let centerYAlz = topYScala - hAlz/2;
-            creaPannello(spessoreLegnoScala, hAlz, larghezzaRampa, currentXScala + wStep + spessoreLegnoScala/2, centerYAlz, larghezzaRampa/2, coloreScala);
-        }
+        
+        // La pedata si appoggia
+        creaPannello(wStep, spessoreLegnoScala, larghezzaRampa, 
+            currentXScala + wStep/2, 
+            topYScala - spessoreLegnoScala/2, 
+            larghezzaRampa/2, coloreScala);
+        
+        // L'alzata scende esattamente fino alla pedata successiva
+        let hAlz = alzataIn - spessoreLegnoScala;
+        let centerYAlz = topYScala - spessoreLegnoScala - hAlz/2; 
+        
+        creaPannello(spessoreLegnoScala, hAlz, larghezzaRampa, 
+            currentXScala + wStep - spessoreLegnoScala/2, 
+            centerYAlz, 
+            larghezzaRampa/2, coloreScala);
+        
         currentXScala += wStep;
     }
-    const hAlzataUltimaBase = alzataIn - spessoreLegnoScala;
-    creaPannello(spessoreLegnoScala, hAlzataUltimaBase, larghezzaRampa, currentXScala + spessoreLegnoScala/2, hAlzataUltimaBase/2, larghezzaRampa/2, coloreScala);
 
 }
 
