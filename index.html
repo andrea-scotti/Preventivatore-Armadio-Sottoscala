@@ -3,103 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Preventivatore Scale Italia - Configuratore Avanzato</title>
-    <link rel="stylesheet" href="style.css">
-    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+    <title>Configuratore Armadio Sottoscala</title>
+    <style>
+        body { margin: 0; display: flex; font-family: sans-serif; height: 100vh; overflow: hidden; }
+        #sidebar { 
+            width: 320px; 
+            background: #fff; 
+            padding: 20px; 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1); 
+            z-index: 10; 
+            overflow-y: auto; 
+            box-sizing: border-box;
         }
-    }
+        #canvas-container { flex-grow: 1; background: #f5f5f5; position: relative; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 13px; }
+        input[type="number"], select, input[type="color"] { 
+            width: 100%; 
+            padding: 8px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            box-sizing: border-box;
+        }
+        h2 { font-size: 18px; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        h3 { font-size: 15px; margin-top: 25px; margin-bottom: 15px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        
+        /* Stili per le sezioni interne generate dinamicamente */
+        .modulo-accessorio {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
     </script>
 </head>
 <body>
-    <div id="app-container">
-        <div id="sidebar">
-            <div style="font-weight: bold; font-size: 20px; margin-bottom: 20px; color: #333;">SCALE ITALIA</div>
-            
-            <section>
-                <h3>PARAMETRI SCALA</h3>
-                <div class="input-group">
-    <label>Pianta scala</label>
-    <select id="piantaScala">
-        <option value="Lineare">Sviluppo lineare</option>
-        <option value="L">Sviluppo a L</option>
-    </select>
-</div>
-<div class="input-group">
-    <label>Tipo Struttura</label>
-    <select id="tipoStruttura">
-        <option value="Lineare">Fascia Lineare</option>
-        <option value="Cremagliera">A Cremagliera</option>
-    </select>
-</div>
-<div class="input-group">
-    <label>Pedata Standard (mm)</label>
-    <input type="number" id="pedata" value="250">
-</div>
-<div class="input-group">
-    <label>Alzata (mm)</label>
-    <input type="number" id="alzata" value="180">
-</div>
-<div class="input-group">
-    <label>Larghezza rampa (mm)</label>
-    <input type="number" id="larghezzaRampa" min="620" max="1000" value="800">
-</div>
-<div class="input-group">
-    <label>Numero totale pedate</label>
-    <input type="number" id="numeroPedate" min="5" max="20" value="10">
-</div>
-<div class="input-group">
-    <label>Larghezza ultima pedata (mm)</label>
-    <input type="number" id="larghezzaUltimaPedata" min="200" max="1000" value="250">
-</div>
-            </section>
 
-            <section>
-                <h3>FINITURE</h3>
-                <div class="input-group">
-                    <label>Colore interno</label>
-                    <select id="coloreInterno">
-                        <option value="#F0ECE1" selected>Bianco 0B01</option>
-                        <option value="#d4c8ba">Cashmere U6933</option>
-                        <option value="#968068">Praline U3062</option>
-                        <option value="#5d5d5f">Antracite U164</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label>Colore esterno (Ante)</label>
-                    <select id="coloreEsterno">
-                        <option value="#0A0A0D">9005 nero intenso</option>
-                        <option value="#5A3A29">8011 marrone noce</option>
-                        <option value="#383E42">7016 grigio antracite</option>
-                        <option value="#F0ECE1" selected>9010 bianco puro</option>
-                        <option value="#756f61">7006 grigio beige</option>
-                        <option value="#A5A5A4">9006 alluminio brillante</option>
-                    </select>
-                </div>
-            </section>
+    <div id="sidebar">
+        <h2>Parametri Sottoscala</h2>
 
-            <section>
-                <h3>ACCESSORI</h3>
-                <div id="accessori-container">
-                    </div>
-            </section>
+        <div class="input-group">
+            <label>Pianta scala</label>
+            <select id="piantaScala">
+                <option value="Lineare">Sviluppo lineare</option>
+                <option value="L">Sviluppo a L</option>
+            </select>
+        </div>
+        
+        <div class="input-group">
+            <label>Tipo Struttura</label>
+            <select id="tipoStruttura">
+                <option value="Lineare">Fascia Lineare</option>
+                <option value="Cremagliera">A Cremagliera</option>
+            </select>
         </div>
 
-        <div id="canvas-container">
-            <div id="overlay-controls">
-                <label class="checkbox-container">
-                    <input type="checkbox" id="showAnte" checked>
-                    <span class="checkmark"></span>
-                    Visualizza Ante
-                </label>
-            </div>
+        <h3>Dimensioni Scala</h3>
+        <div class="input-group">
+            <label>Numero totale pedate</label>
+            <input type="number" id="numeroPedate" min="5" max="20" value="10">
         </div>
+        <div class="input-group">
+            <label>Larghezza rampa (mm)</label>
+            <input type="number" id="larghezzaRampa" min="620" max="1000" value="800">
+        </div>
+        <div class="input-group">
+            <label>Pedata Standard (mm)</label>
+            <input type="number" id="pedata" value="250">
+        </div>
+        <div class="input-group">
+            <label>Alzata (mm)</label>
+            <input type="number" id="alzata" value="180">
+        </div>
+        <div class="input-group">
+            <label>Larghezza ultima pedata in alto (mm)</label>
+            <input type="number" id="larghezzaUltimaPedata" min="200" max="1000" value="250">
+        </div>
+
+        <h3>Finiture Estetiche</h3>
+        <div class="input-group">
+            <label>Colore Interno Moduli</label>
+            <input type="color" id="coloreInterno" value="#E5E5E5">
+        </div>
+        <div class="input-group">
+            <label>Colore Ante ed Esterni</label>
+            <input type="color" id="coloreEsterno" value="#FFFFFF">
+        </div>
+        <div class="input-group">
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="checkbox" id="showAnte" checked style="width:18px; height:18px; cursor:pointer;">
+                Mostra Ante Chiuse
+            </label>
+        </div>
+
+        <h3>Accessori Moduli</h3>
+        <div id="accessori-container"></div>
+        
     </div>
 
+    <div id="canvas-container"></div>
+
     <script type="module" src="script.js"></script>
+
 </body>
 </html>
