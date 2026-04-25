@@ -28,7 +28,6 @@
         h2 { font-size: 18px; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
         h3 { font-size: 15px; margin-top: 25px; margin-bottom: 15px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         
-        /* Stili per le sezioni interne generate dinamicamente */
         .modulo-accessorio {
             background: #f9f9f9;
             border: 1px solid #e0e0e0;
@@ -53,14 +52,6 @@
         <h2>Parametri Sottoscala</h2>
 
         <div class="input-group">
-            <label>Pianta scala</label>
-            <select id="piantaScala">
-                <option value="Lineare">Sviluppo lineare</option>
-                <option value="L">Sviluppo a L</option>
-            </select>
-        </div>
-        
-        <div class="input-group">
             <label>Tipo Struttura</label>
             <select id="tipoStruttura">
                 <option value="Lineare">Fascia Lineare</option>
@@ -70,15 +61,7 @@
 
         <h3>Dimensioni Scala</h3>
         <div class="input-group">
-            <label>Numero totale pedate</label>
-            <input type="number" id="numeroPedate" min="5" max="20" value="10">
-        </div>
-        <div class="input-group">
-            <label>Larghezza rampa (mm)</label>
-            <input type="number" id="larghezzaRampa" min="620" max="1000" value="800">
-        </div>
-        <div class="input-group">
-            <label>Pedata Standard (mm)</label>
+            <label>Pedata (mm)</label>
             <input type="number" id="pedata" value="250">
         </div>
         <div class="input-group">
@@ -86,8 +69,12 @@
             <input type="number" id="alzata" value="180">
         </div>
         <div class="input-group">
-            <label>Larghezza ultima pedata in alto (mm)</label>
-            <input type="number" id="larghezzaUltimaPedata" min="200" max="1000" value="250">
+            <label>Gradino di inizio</label>
+            <input type="number" id="gradinoInizio" value="4">
+        </div>
+        <div class="input-group">
+            <label>Gradini Retti Totali</label>
+            <input type="number" id="gradiniRetti" value="10">
         </div>
 
         <h3>Finiture Estetiche</h3>
