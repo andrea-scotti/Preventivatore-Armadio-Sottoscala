@@ -65,65 +65,59 @@ function creaAntaSagomata(xLeft, yBottom, zBack, w, hL, hR, spessore, color) {
     scene.add(line);
 }
 
-function calcolaBottomStrutturaY(x, tipo, pIn, aIn, gRetti, hMin) {
+function calcolaBottomStrutturaY(x, tipo, pIn, pUltimo, aIn, N) {
     const m = -aIn / pIn;
     const theta = Math.atan(aIn / pIn);
-    const Y_bottom_tread_0 = hMin + 20 + ((gRetti - 1) * aIn); 
+    const lineY = m * (x - pUltimo) + (N - 1) * aIn;
     const offsetBottom = (tipo === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
-    return m * x + Y_bottom_tread_0 - offsetBottom;
+    return lineY - offsetBottom;
 }
 
-function creaFasciaStruttura(tipo, pIn, aIn, gRetti, hMin, spessoreFascia, color) {
+function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color) {
     const m = -aIn / pIn;
     const theta = Math.atan(aIn / pIn);
-    
-    const Y_bottom_tread_0 = hMin + 20 + ((gRetti - 1) * aIn);
+    const lineY = (x) => m * (x - pUltimo) + (N - 1) * aIn;
     const offsetBottom = (tipo === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
-    const bottomY = (x) => m * x + Y_bottom_tread_0 - offsetBottom;
+    const bottomY = (x) => lineY(x) - offsetBottom;
 
     const pts = [];
-    const xEndTotal = (gRetti * pIn) + 40.6; 
-    
-    const yCut = hMin + 20 + gRetti * aIn;
+    const x_start = 0;
+    const xEndTotal = pUltimo + (N - 1) * pIn + 40.6; 
+    const yTopStairs = N * aIn + 40.6; 
 
     if (tipo === 'Lineare') {
-        const Y_top_0 = Y_bottom_tread_0 + 40.6;
-        const q_noses = Y_top_0 - m * (pIn + 40.6);
         const offsetTop = 20 / Math.cos(theta);
-        const topY = (x) => m * x + q_noses + offsetTop;
-
-        const xCutTop = (yCut - q_noses - offsetTop) / m;
+        const topY = (x) => lineY(x) + offsetTop;
 
         pts.push(new THREE.Vector2(0, bottomY(0)));
         pts.push(new THREE.Vector2(xEndTotal, bottomY(xEndTotal)));
         pts.push(new THREE.Vector2(xEndTotal, topY(xEndTotal)));
         
-        if (xCutTop > 0) {
-            pts.push(new THREE.Vector2(xCutTop, yCut));
-            pts.push(new THREE.Vector2(0, yCut));
+        const yTop0 = topY(0);
+        if (yTop0 > yTopStairs) {
+            const intersectX = (yTopStairs - ((N - 1) * aIn - m * pUltimo + offsetTop)) / m;
+            pts.push(new THREE.Vector2(intersectX, yTopStairs));
+            pts.push(new THREE.Vector2(0, yTopStairs));
         } else {
-            pts.push(new THREE.Vector2(0, topY(0)));
+            pts.push(new THREE.Vector2(0, yTop0));
         }
     } else { // Cremagliera
-        const x_start = 0; 
-        
         pts.push(new THREE.Vector2(x_start, bottomY(x_start)));
         pts.push(new THREE.Vector2(xEndTotal, bottomY(xEndTotal)));
-        pts.push(new THREE.Vector2(xEndTotal, hMin + 20 + 40.6));
+        pts.push(new THREE.Vector2(xEndTotal, aIn + 40.6));
         
-        for (let k = gRetti - 1; k >= 0; k--) {
-            let y_top = hMin + 20 + ((gRetti - 1 - k) * aIn) + 40.6;
+        for (let k = N - 1; k >= 0; k--) {
+            let y_top = (N - k) * aIn + 40.6;
+            let x_riser_front = (k === 0) ? 40.6 : pUltimo + (k - 1) * pIn + 40.6;
             
             if (k > 0) {
-                let x_riser_front = (k * pIn) + 40.6;
                 pts.push(new THREE.Vector2(x_riser_front, y_top));
-                let y_next_top = hMin + 20 + ((gRetti - 1 - (k - 1)) * aIn) + 40.6;
+                let y_next_top = (N - (k - 1)) * aIn + 40.6;
                 pts.push(new THREE.Vector2(x_riser_front, y_next_top));
             } else {
-                let x_riser_front = 40.6;
                 pts.push(new THREE.Vector2(x_riser_front, y_top));
-                pts.push(new THREE.Vector2(x_riser_front, yCut));
-                pts.push(new THREE.Vector2(x_start, yCut));
+                pts.push(new THREE.Vector2(x_riser_front, yTopStairs));
+                pts.push(new THREE.Vector2(x_start, yTopStairs));
             }
         }
     }
@@ -215,26 +209,27 @@ function generaArmadio() {
     pulisciScena();
 
     const tipoStruttura = document.getElementById('tipoStruttura').value;
-    const pedataIn = parseFloat(document.getElementById('pedata').value) || 0;
-    const alzataIn = parseFloat(document.getElementById('alzata').value) || 0;
-    const gradinoInizioIn = parseFloat(document.getElementById('gradinoInizio').value) || 0;
-    let gradiniRettiIn = parseInt(document.getElementById('gradiniRetti').value) || 0;
-    if (gradiniRettiIn % 2 !== 0) gradiniRettiIn += 1;
+    const pedataIn = parseFloat(document.getElementById('pedata').value) || 250;
+    const pedataUltimo = parseFloat(document.getElementById('pedataUltimo').value) || 250;
+    const alzataIn = parseFloat(document.getElementById('alzata').value) || 180;
+    const gradinoInizioIn = parseInt(document.getElementById('gradinoInizio').value) || 3;
+    const numeroPedate = parseInt(document.getElementById('numeroPedate').value) || 10;
+    const tipoSbarco = document.getElementById('tipoSbarco').value;
 
     const colorInt = document.getElementById('coloreInterno').value;
     const colorEst = document.getElementById('coloreEsterno').value;
     const showAnte = document.getElementById('showAnte').checked;
 
-    const numeroModuli = gradiniRettiIn / 2;
-    const luce = pedataIn * gradiniRettiIn;
-    
-    const altezzaMinimaVal = (alzataIn * gradinoInizioIn) - 60.6;
-    const passoCassetto = altezzaMinimaVal / 2;
+    // Calcolo dimensioni generali basate sui nuovi input (Scala da terra = Y0)
+    const W_tot = pedataUltimo + (numeroPedate - 1) * pedataIn;
+    // L'armadio si ferma in corrispondenza del gradino di inizio
+    const W_armadio = pedataUltimo + (numeroPedate - gradinoInizioIn) * pedataIn;
 
-    const profondita = 600;
-    const larghezzaModulo = (luce - 60) / numeroModuli;
-    const deltaAltezza = alzataIn * 2;
+    const numeroModuli = Math.max(1, Math.round((numeroPedate - gradinoInizioIn + 1) / 2));
+    const larghezzaModulo = (W_armadio - 60) / numeroModuli;
     
+    const passoCassetto = 160; 
+    const profondita = 600;
     const spessore = 19;
     const hZoccolo = 45;
     const spessoreSchienale = 5;
@@ -242,8 +237,13 @@ function generaArmadio() {
 
     let altezzeModuli = [];
     for (let i = 0; i < numeroModuli; i++) {
-        altezzeModuli.push(altezzaMinimaVal + ((numeroModuli - 1 - i) * deltaAltezza));
+        let xr = (i + 1) * larghezzaModulo;
+        let diff = xr - pedataUltimo;
+        let k = diff <= 0 ? 0 : Math.ceil(diff / pedataIn);
+        let step_h = (numeroPedate - k) * alzataIn;
+        altezzeModuli.push(step_h - 60.6);
     }
+    
     aggiornaInterfacciaAccessori(numeroModuli, altezzeModuli, passoCassetto, larghezzaModulo, profondita);
 
     let startX = 0;
@@ -282,7 +282,7 @@ function generaArmadio() {
 
         // --- TAMPONAMENTO CREMAGLIERA ---
         if (tipoStruttura !== 'Lineare') {
-            const wTamp = pedataIn - 20; 
+            const wTamp = (i === 0) ? pedataUltimo - 20 : pedataIn - 20; 
             const hTamp = alzataIn;
             if (wTamp > 0 && hTamp > 0) {
                 creaPannello(wTamp, hTamp, spessore, startX + (wTamp / 2), hCorrente + (hTamp / 2), profondita - (spessore / 2), colorInt);
@@ -326,53 +326,64 @@ function generaArmadio() {
             const xRight = xLeft + wFrontale;
             const yStartAnta = quotaTerra + yOccupataDaCassetti;
             
-            const yStrutturaLeft = calcolaBottomStrutturaY(xLeft, tipoStruttura, pedataIn, alzataIn, gradiniRettiIn, altezzaMinimaVal);
-            const yStrutturaRight = calcolaBottomStrutturaY(xRight, tipoStruttura, pedataIn, alzataIn, gradiniRettiIn, altezzaMinimaVal);
+            const yStrutturaLeft = calcolaBottomStrutturaY(xLeft, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate);
+            const yStrutturaRight = calcolaBottomStrutturaY(xRight, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate);
             
             const hLeft = yStrutturaLeft - 20 - yStartAnta;
             const hRight = yStrutturaRight - 20 - yStartAnta;
 
             if (hLeft > 0 && hRight > 0) { 
-                creaAntaSagomata(xLeft, yStartAnta, profondita, wFrontale, hLeft, hRight, spessore, colorEst);
+                creaAntaSagomata(xLeft, yStartAnta, profondita + spessore / 2, wFrontale, hLeft, hRight, spessore, colorEst);
             }
         }
 
         startX += larghezzaModulo;
     }
 
-    // --- TAMPONAMENTO LINEARE (Geometria Singola Continua) ---
-    // Genera un UNICO pannello per tutta l'area da coprire, eliminando le linee interne.
-    if (tipoStruttura === 'Lineare') {
-        const luceArmadio = numeroModuli * larghezzaModulo; 
+    // --- TAMPONAMENTO TRIANGOLARE VUOTO (A FILO ANTE) ---
+    if (showAnte && startX < W_tot) {
+        const xLeftBuco = startX + (aria / 2);
+        const wBuco = W_tot - xLeftBuco;
+        const yStartBuco = 8;
         
-        // Funzione per calcolare l'altezza sicura dal tetto (-5mm di aria) per un dato punto x
+        const hLeftBuco = calcolaBottomStrutturaY(xLeftBuco, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
+        const hRightBuco = calcolaBottomStrutturaY(W_tot, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
+
+        if (wBuco > 0 && hLeftBuco > 0) {
+            creaAntaSagomata(xLeftBuco, yStartBuco, profondita + spessore / 2, wBuco, hLeftBuco, Math.max(0, hRightBuco), spessore, colorEst);
+        }
+    }
+
+    // --- TAMPONAMENTO LINEARE SUPERIORE CONTINUO ---
+    if (tipoStruttura === 'Lineare') {
+        const luceArmadio = startX; 
+        
         function getSafeTopY(x) {
-            let k = Math.floor((x + 5) / pedataIn);
-            if (k < 0) k = 0;
-            if (k > gradiniRettiIn - 1) k = gradiniRettiIn - 1;
-            return altezzaMinimaVal + 20 + ((gradiniRettiIn - 1 - k) * alzataIn) - 5;
+            if (x <= pedataUltimo - 5) return numeroPedate * alzataIn - 5;
+            let diff = x + 5 - pedataUltimo;
+            let k = Math.floor(diff / pedataIn) + 1;
+            if (k > numeroPedate - 1) k = numeroPedate - 1;
+            return (numeroPedate - k) * alzataIn - 5;
         }
 
         const pts = [];
-        
-        // 1. Tracciamento base (segue i tetti dei moduli, da sinistra a destra)
         pts.push(new THREE.Vector2(0, altezzeModuli[0]));
+        
         for (let i = 0; i < numeroModuli; i++) {
             let x1 = i * larghezzaModulo;
             let x2 = (i + 1) * larghezzaModulo;
             let y = altezzeModuli[i];
             
             if (i > 0) {
-                pts.push(new THREE.Vector2(x1, altezzeModuli[i - 1])); // Scalino verso il modulo più basso
+                pts.push(new THREE.Vector2(x1, altezzeModuli[i - 1]));
             }
             pts.push(new THREE.Vector2(x1, y));
             pts.push(new THREE.Vector2(x2, y));
         }
 
-        // 2. Tracciamento superiore (segue le pedate a -5mm, da destra a sinistra)
         let changes = [];
-        for (let k = gradiniRettiIn; k >= 1; k--) {
-            let cx = k * pedataIn - 5; // I punti dove la scala "sale" guardando da destra a sinistra
+        for (let k = numeroPedate - 1; k >= 1; k--) {
+            let cx = pedataUltimo + (k - 1) * pedataIn - 5; 
             if (cx < luceArmadio && cx > 0) {
                 changes.push(cx);
             }
@@ -383,19 +394,14 @@ function generaArmadio() {
 
         for (let i = 0; i < changes.length; i++) {
             let cx = changes[i];
-            // Va orizzontale fino al punto di cambio gradino
             pts.push(new THREE.Vector2(cx, last_top_y));
-            // Calcola la nuova altezza del gradino superiore
             let new_y = getSafeTopY(cx - 0.1);
-            // Sale in verticale
             pts.push(new THREE.Vector2(cx, new_y));
             last_top_y = new_y;
         }
 
-        // Chiude tornando al punto 0 (parete sinistra)
         pts.push(new THREE.Vector2(0, last_top_y));
 
-        // Creazione dell'unica Mesh
         const shape = new THREE.Shape(pts);
         const extrudeSettings = { depth: spessore, bevelEnabled: false };
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
@@ -406,7 +412,7 @@ function generaArmadio() {
         mesh.position.set(0, 0, profondita - spessore); 
         scene.add(mesh);
         
-        const edges = new THREE.EdgesGeometry(geometry, 20); // Disegna i contorni perimetrali
+        const edges = new THREE.EdgesGeometry(geometry, 20); 
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
         line.name = "pezzoModello";
         line.position.set(0, 0, profondita - spessore);
@@ -414,27 +420,37 @@ function generaArmadio() {
     }
 
     // --- COSTRUZIONE FASCIA STRUTTURA LATERALE ---
-    creaFasciaStruttura(tipoStruttura, pedataIn, alzataIn, gradiniRettiIn, altezzaMinimaVal, 8, colorEst);
+    creaFasciaStruttura(tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate, 8, colorEst);
 
     // --- COSTRUZIONE GRADINI E ALZATE IN LEGNO ---
     const spessoreLegnoScala = 40.6;
     const coloreScala = 0x966F33; 
     
-    for (let k = 0; k < gradiniRettiIn; k++) {
-        const quotaY = altezzaMinimaVal + 20 + ((gradiniRettiIn - 1 - k) * alzataIn);
-        const quotaX = k * pedataIn;
+    for (let k = 0; k < numeroPedate; k++) {
+        const quotaY = (numeroPedate - k) * alzataIn;
+        const quotaX = (k === 0) ? 0 : pedataUltimo + (k - 1) * pedataIn;
+        const wPedata = (k === 0) ? pedataUltimo + spessoreLegnoScala : pedataIn + spessoreLegnoScala;
 
-        const wPedata = pedataIn + spessoreLegnoScala;
         creaPannello(wPedata, spessoreLegnoScala, profondita, quotaX + wPedata/2, quotaY + spessoreLegnoScala/2, profondita/2, coloreScala);
 
-        const hAlzata = alzataIn - spessoreLegnoScala;
-        const centerXYAlzata = quotaY - hAlzata/2;
-        creaPannello(spessoreLegnoScala, hAlzata, profondita, quotaX + pedataIn + spessoreLegnoScala/2, centerXYAlzata, profondita/2, coloreScala);
+        if (k < numeroPedate - 1) {
+            const hAlzata = alzataIn - spessoreLegnoScala;
+            const centerXYAlzata = quotaY - hAlzata/2;
+            creaPannello(spessoreLegnoScala, hAlzata, profondita, quotaX + wPedata - spessoreLegnoScala/2, centerXYAlzata, profondita/2, coloreScala);
+        }
     }
 
-    const hAlzataUltima = alzataIn - spessoreLegnoScala;
-    const yTop0 = altezzaMinimaVal + 20 + ((gradiniRettiIn - 1) * alzataIn) + spessoreLegnoScala;
-    creaPannello(spessoreLegnoScala, hAlzataUltima, profondita, spessoreLegnoScala/2, yTop0 + hAlzataUltima/2, profondita/2, coloreScala);
+    // Ultima alzata in fondo al primo gradino (terra)
+    const hAlzataBase = alzataIn - spessoreLegnoScala;
+    const quotaXBase = pedataUltimo + (numeroPedate - 1) * pedataIn;
+    creaPannello(spessoreLegnoScala, hAlzataBase, profondita, quotaXBase + spessoreLegnoScala/2, hAlzataBase/2, profondita/2, coloreScala);
+
+    // Gestione Tipo Sbarco (Alzata aggiuntiva sopra l'ultima pedata)
+    if (tipoSbarco === 'Sotto solaio') {
+        const hAlzataSbarco = alzataIn - spessoreLegnoScala;
+        const yTopSbarco = numeroPedate * alzataIn + spessoreLegnoScala;
+        creaPannello(spessoreLegnoScala, hAlzataSbarco, profondita, spessoreLegnoScala/2, yTopSbarco + hAlzataSbarco/2, profondita/2, coloreScala);
+    }
 }
 
 const inputs = document.querySelectorAll('#sidebar input:not(.check-accessorio):not(.slider-accessorio), #sidebar select, #showAnte');
