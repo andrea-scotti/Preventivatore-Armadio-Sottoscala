@@ -30,20 +30,31 @@
                     </select>
                 </div>
                 <div class="input-group">
+                    <label>Tipo di sbarco</label>
+                    <select id="tipoSbarco">
+                        <option value="Pari solaio" selected>Pari solaio</option>
+                        <option value="Sotto solaio">Sotto solaio</option>
+                    </select>
+                </div>
+                <div class="input-group">
                     <label>Pedata (mm)</label>
-                    <input type="number" id="pedata" value="250">
+                    <input type="number" id="pedata" value="250" min="190" max="280" step="10">
+                </div>
+                <div class="input-group">
+                    <label>Pedata Ultimo Gradino (mm)</label>
+                    <input type="number" id="pedataUltimo" value="250" min="190" max="1000" step="10">
                 </div>
                 <div class="input-group">
                     <label>Alzata (mm)</label>
                     <input type="number" id="alzata" value="180">
                 </div>
                 <div class="input-group">
-                    <label>Gradino di inizio</label>
-                    <input type="number" id="gradinoInizio" value="3">
+                    <label>N° pedate (Totali)</label>
+                    <input type="number" id="numeroPedate" value="10" min="4" max="20" step="1">
                 </div>
                 <div class="input-group">
-                    <label>Gradini retti (Pari)</label>
-                    <input type="number" id="gradiniRetti" value="6" min="2" step="2">
+                    <label>Gradino di inizio armadio (dal basso)</label>
+                    <input type="number" id="gradinoInizio" value="3" min="1" step="1">
                 </div>
             </section>
 
