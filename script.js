@@ -73,42 +73,60 @@ function calcolaBottomStrutturaY(x, tipo, pIn, pUltimo, aIn, N) {
     return lineY - offsetBottom;
 }
 
-function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color) {
+function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color, tipoSbarco) {
     const m = -aIn / pIn;
     const theta = Math.atan(aIn / pIn);
     
-    // Linea inferiore retro
-    const lineY = (x) => m * (x - pUltimo) + (N - 1) * aIn - 40.6;
     const offsetBottom = (tipo === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
-    const bottomY = (x) => lineY(x) - offsetBottom;
+    const bottomY = (x) => m * (x - pUltimo) + (N - 1) * aIn - 40.6 - offsetBottom;
 
     const pts = [];
-    const x_start = 0;
     const xEndTotal = pUltimo + (N - 1) * pIn + 40.6; 
     const yTopStairs = N * aIn; 
+    
+    // Calcolo Y massima in base al tipo di sbarco
+    const maxY = (tipoSbarco === 'Sotto solaio') ? (N * aIn + aIn - 40.6) : (N * aIn);
+
+    // Calcolo intercettazione esatta con il pavimento (Y = 0) per non far sprofondare la struttura
+    const xFloorBottom = pUltimo + (40.6 + offsetBottom - (N - 1) * aIn) / m;
 
     if (tipo === 'Lineare') {
-        // Calcolo riga superiore basato sui nasi dei gradini
         const q_noses = -m * (pUltimo + 40.6) + N * aIn;
         const offsetTop = 20 / Math.cos(theta);
         const topY = (x) => m * x + q_noses + offsetTop;
 
-        pts.push(new THREE.Vector2(0, bottomY(0)));
-        pts.push(new THREE.Vector2(xEndTotal, bottomY(xEndTotal)));
-        pts.push(new THREE.Vector2(xEndTotal, topY(xEndTotal)));
-        
-        const yTop0 = topY(0);
-        if (yTop0 > yTopStairs) {
-            const intersectX = (yTopStairs - q_noses - offsetTop) / m;
-            pts.push(new THREE.Vector2(intersectX, yTopStairs));
-            pts.push(new THREE.Vector2(0, yTopStairs));
+        pts.push(new THREE.Vector2(0, Math.max(0, bottomY(0))));
+
+        // Linea inferiore dritta sul pavimento se tocca prima della fine
+        if (xFloorBottom > 0 && xFloorBottom < xEndTotal) {
+            pts.push(new THREE.Vector2(xFloorBottom, 0));
+            pts.push(new THREE.Vector2(xEndTotal, 0));
         } else {
-            pts.push(new THREE.Vector2(0, yTop0));
+            pts.push(new THREE.Vector2(xEndTotal, Math.max(0, bottomY(xEndTotal))));
+        }
+        
+        const yTopEnd = topY(xEndTotal);
+        pts.push(new THREE.Vector2(xEndTotal, Math.max(0, yTopEnd)));
+        
+        const xTopIntersect = (maxY - q_noses - offsetTop) / m;
+        if (xTopIntersect > 0 && xTopIntersect < xEndTotal) {
+            pts.push(new THREE.Vector2(xTopIntersect, maxY));
+            pts.push(new THREE.Vector2(0, maxY));
+        } else {
+            pts.push(new THREE.Vector2(0, Math.min(maxY, topY(0))));
         }
     } else { // Cremagliera
-        pts.push(new THREE.Vector2(x_start, bottomY(x_start)));
-        pts.push(new THREE.Vector2(xEndTotal, bottomY(xEndTotal)));
-        pts.push(new THREE.Vector2(xEndTotal, aIn));
+        pts.push(new THREE.Vector2(0, Math.max(0, bottomY(0))));
+
+        // Appoggio sul pavimento
+        if (xFloorBottom > 0 && xFloorBottom < xEndTotal) {
+            pts.push(new THREE.Vector2(xFloorBottom, 0));
+            pts.push(new THREE.Vector2(xEndTotal, 0));
+        } else {
+            pts.push(new THREE.Vector2(xEndTotal, Math.max(0, bottomY(xEndTotal))));
+        }
+        
+        pts.push(new THREE.Vector2(xEndTotal, Math.max(0, aIn)));
         
         for (let k = N - 1; k >= 0; k--) {
             let y_top = (N - k) * aIn;
@@ -120,8 +138,13 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color) 
                 pts.push(new THREE.Vector2(x_riser_front, y_next_top));
             } else {
                 pts.push(new THREE.Vector2(x_riser_front, y_top));
-                pts.push(new THREE.Vector2(x_riser_front, yTopStairs));
-                pts.push(new THREE.Vector2(x_start, yTopStairs));
+                if (tipoSbarco === 'Sotto solaio') {
+                    // Prolungamento in alto per il sbarco "Sotto solaio"
+                    pts.push(new THREE.Vector2(x_riser_front, maxY));
+                    pts.push(new THREE.Vector2(0, maxY));
+                } else {
+                    pts.push(new THREE.Vector2(0, y_top));
+                }
             }
         }
     }
@@ -217,7 +240,7 @@ function generaArmadio() {
     const pedataUltimo = parseFloat(document.getElementById('pedataUltimo')?.value) || 250;
     const alzataIn = parseFloat(document.getElementById('alzata')?.value) || 180;
     
-    const gradinoInizioIn = 3; // Ora è sempre fisso a 3
+    const gradinoInizioIn = 3; 
     const numeroPedate = parseInt(document.getElementById('numeroPedate')?.value) || 10;
     const tipoSbarco = document.getElementById('tipoSbarco')?.value || 'Pari solaio';
 
@@ -225,12 +248,9 @@ function generaArmadio() {
     const colorEst = document.getElementById('coloreEsterno')?.value || '#FFFFFF';
     const showAnte = document.getElementById('showAnte')?.checked ?? true;
 
-    // Calcolo dimensioni generali (Scala da terra)
     const W_tot = pedataUltimo + (numeroPedate - 1) * pedataIn;
-    // L'armadio si ferma in corrispondenza del gradino di inizio
     const W_armadio = pedataUltimo + (numeroPedate - gradinoInizioIn) * pedataIn;
 
-    // Numero di moduli in base allo spazio utile coperto dall'armadio
     const numeroModuli = Math.max(1, Math.round((numeroPedate - gradinoInizioIn + 1) / 2));
     const larghezzaModulo = (W_armadio - 60) / numeroModuli;
     
@@ -241,7 +261,6 @@ function generaArmadio() {
     const spessoreSchienale = 5;
     const aria = 3;
 
-    // Calcolo altezze corrette seguendo fedelmente la pendenza del tetto armadio
     let altezzeModuli = [];
     for (let i = 0; i < numeroModuli; i++) {
         let xr = (i + 1) * larghezzaModulo;
@@ -276,24 +295,20 @@ function generaArmadio() {
             }
         }
 
-        // Struttura Armadio Base
         creaPannello(spessore, hCorrente, profondita, startX + (spessore / 2), hCorrente / 2, profondita / 2, colorInt);
         creaPannello(spessore, hCorrente, profondita, startX + larghezzaModulo - (spessore / 2), hCorrente / 2, profondita / 2, colorInt);
         creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hCorrente - (spessore / 2), profondita / 2, colorInt);
         creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), hZoccolo + (spessore / 2), profondita / 2, colorInt);
         creaPannello(wInterno, hZoccolo, spessore, startX + (larghezzaModulo / 2), hZoccolo / 2, profondita - 5 - (spessore / 2), colorInt);
         
-        // Schienale
         const hSchienale = hCorrente - (spessore * 2) - hZoccolo;
         creaPannello(wInterno, hSchienale, spessoreSchienale, startX + (larghezzaModulo / 2), hZoccolo + spessore + (hSchienale / 2), 10 + (spessoreSchienale / 2), colorInt);
 
-        // Ripiano Interno Cassetti
         if (numCassetti > 0) {
             const altezzaBaseRipiano = 8 + (numCassetti * passoCassetto);
             creaPannello(wInterno, spessore, profondita, startX + (larghezzaModulo / 2), altezzaBaseRipiano - (spessore / 2), profondita / 2, colorInt);
         }
 
-        // Reggiabiti
         if (checkboxReggiabiti && checkboxReggiabiti.checked) {
             const coloreReggiabiti = 0x999999;
             const wSostegno = 12, hSostegno = 63, dSostegno = 19;
@@ -306,7 +321,6 @@ function generaArmadio() {
             creaPannello(wSbarra, hSbarra, dSbarra, startX + (larghezzaModulo / 2), ySbarra, profondita / 2, coloreReggiabiti);
         }
 
-        // Frontali e Ante Sagomate
         if (showAnte) {
             const wFrontale = larghezzaModulo - aria;
             const quotaTerra = 8;
@@ -336,18 +350,29 @@ function generaArmadio() {
         startX += larghezzaModulo;
     }
 
-    // --- TAMPONAMENTO TRIANGOLARE VUOTO (A FILO ANTE) ---
-    // Copre esattamente lo spazio tra la fine dell'ultimo modulo e la base finale della scala
+    // --- TAMPONAMENTO TRIANGOLARE VUOTO (MATEMATICA PENDENZA PERFETTA) ---
     if (showAnte && startX < W_tot) {
         const xLeftBuco = startX + (aria / 2);
-        const wBuco = W_tot - xLeftBuco;
         const yStartBuco = 8;
         
         const hLeftBuco = calcolaBottomStrutturaY(xLeftBuco, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
-        const hRightBuco = calcolaBottomStrutturaY(W_tot, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
-
-        if (wBuco > 0 && hLeftBuco > 0) {
-            creaAntaSagomata(xLeftBuco, yStartBuco, profondita + spessore / 2, wBuco, hLeftBuco, Math.max(0, hRightBuco), spessore, colorEst);
+        
+        if (hLeftBuco > 0) {
+            // Calcolo del punto X esatto in cui la pendenza tocca gli 8mm da terra
+            const m = -alzataIn / pedataIn;
+            const theta = Math.atan(alzataIn / pedataIn);
+            const offsetBottom = (tipoStruttura === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
+            
+            const xZero = pedataUltimo + (40.6 + offsetBottom + 20 + yStartBuco - (numeroPedate - 1) * alzataIn) / m;
+            
+            // Il buco non supera né la scala né il punto in cui tocca il limite
+            const xRightBuco = Math.min(W_tot, xZero);
+            const wBuco = xRightBuco - xLeftBuco;
+            
+            if (wBuco > 0) {
+                const hRightBuco = calcolaBottomStrutturaY(xRightBuco, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
+                creaAntaSagomata(xLeftBuco, yStartBuco, profondita + spessore / 2, wBuco, hLeftBuco, Math.max(0, hRightBuco), spessore, colorEst);
+            }
         }
     }
 
@@ -410,7 +435,7 @@ function generaArmadio() {
     scene.add(line);
 
     // --- COSTRUZIONE FASCIA STRUTTURA LATERALE ---
-    creaFasciaStruttura(tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate, 8, colorEst);
+    creaFasciaStruttura(tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate, 8, colorEst, tipoSbarco);
 
     // --- COSTRUZIONE GRADINI E ALZATE IN LEGNO ---
     const spessoreLegnoScala = 40.6;
