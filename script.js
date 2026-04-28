@@ -84,10 +84,7 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color, 
     const xEndTotal = pUltimo + (N - 1) * pIn + 40.6; 
     const yTopStairs = N * aIn; 
     
-    // Calcolo Y massima in base al tipo di sbarco
     const maxY = (tipoSbarco === 'Sotto solaio') ? (N * aIn + aIn - 40.6) : (N * aIn);
-
-    // Calcolo intercettazione esatta con il pavimento (Y = 0) per non far sprofondare la struttura
     const xFloorBottom = pUltimo + (40.6 + offsetBottom - (N - 1) * aIn) / m;
 
     if (tipo === 'Lineare') {
@@ -97,7 +94,6 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color, 
 
         pts.push(new THREE.Vector2(0, Math.max(0, bottomY(0))));
 
-        // Linea inferiore dritta sul pavimento se tocca prima della fine
         if (xFloorBottom > 0 && xFloorBottom < xEndTotal) {
             pts.push(new THREE.Vector2(xFloorBottom, 0));
             pts.push(new THREE.Vector2(xEndTotal, 0));
@@ -118,7 +114,6 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color, 
     } else { // Cremagliera
         pts.push(new THREE.Vector2(0, Math.max(0, bottomY(0))));
 
-        // Appoggio sul pavimento
         if (xFloorBottom > 0 && xFloorBottom < xEndTotal) {
             pts.push(new THREE.Vector2(xFloorBottom, 0));
             pts.push(new THREE.Vector2(xEndTotal, 0));
@@ -139,7 +134,6 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N, spessoreFascia, color, 
             } else {
                 pts.push(new THREE.Vector2(x_riser_front, y_top));
                 if (tipoSbarco === 'Sotto solaio') {
-                    // Prolungamento in alto per il sbarco "Sotto solaio"
                     pts.push(new THREE.Vector2(x_riser_front, maxY));
                     pts.push(new THREE.Vector2(0, maxY));
                 } else {
@@ -239,10 +233,23 @@ function generaArmadio() {
     const pedataIn = parseFloat(document.getElementById('pedata')?.value) || 250;
     const pedataUltimo = parseFloat(document.getElementById('pedataUltimo')?.value) || 250;
     const alzataIn = parseFloat(document.getElementById('alzata')?.value) || 180;
-    
-    const gradinoInizioIn = 3; 
     const numeroPedate = parseInt(document.getElementById('numeroPedate')?.value) || 10;
     const tipoSbarco = document.getElementById('tipoSbarco')?.value || 'Pari solaio';
+    
+    // Gestione logica per Gradino di inizio dinamico (tra 3 e N-2)
+    let gradinoInizioInput = document.getElementById('gradinoInizio');
+    let gradinoInizioIn = parseInt(gradinoInizioInput?.value) || 3;
+    const maxGradinoInizio = Math.max(3, numeroPedate - 2);
+    
+    if (gradinoInizioIn > maxGradinoInizio) {
+        gradinoInizioIn = maxGradinoInizio;
+        if(gradinoInizioInput) gradinoInizioInput.value = maxGradinoInizio;
+    }
+    if (gradinoInizioIn < 3) {
+        gradinoInizioIn = 3;
+        if(gradinoInizioInput) gradinoInizioInput.value = 3;
+    }
+    if(gradinoInizioInput) gradinoInizioInput.max = maxGradinoInizio;
 
     const colorInt = document.getElementById('coloreInterno')?.value || '#F0ECE1';
     const colorEst = document.getElementById('coloreEsterno')?.value || '#FFFFFF';
@@ -358,14 +365,12 @@ function generaArmadio() {
         const hLeftBuco = calcolaBottomStrutturaY(xLeftBuco, tipoStruttura, pedataIn, pedataUltimo, alzataIn, numeroPedate) - 20 - yStartBuco;
         
         if (hLeftBuco > 0) {
-            // Calcolo del punto X esatto in cui la pendenza tocca gli 8mm da terra
             const m = -alzataIn / pedataIn;
             const theta = Math.atan(alzataIn / pedataIn);
             const offsetBottom = (tipoStruttura === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
             
             const xZero = pedataUltimo + (40.6 + offsetBottom + 20 + yStartBuco - (numeroPedate - 1) * alzataIn) / m;
             
-            // Il buco non supera né la scala né il punto in cui tocca il limite
             const xRightBuco = Math.min(W_tot, xZero);
             const wBuco = xRightBuco - xLeftBuco;
             
@@ -455,12 +460,10 @@ function generaArmadio() {
         }
     }
 
-    // Ultima alzata a contatto con il pavimento
     const hAlzataBase = alzataIn - spessoreLegnoScala;
     const quotaXBase = pedataUltimo + (numeroPedate - 1) * pedataIn;
     creaPannello(spessoreLegnoScala, hAlzataBase, profondita, quotaXBase + spessoreLegnoScala/2, hAlzataBase/2, profondita/2, coloreScala);
 
-    // Gestione Tipo Sbarco (Alzata aggiuntiva in cima)
     if (tipoSbarco === 'Sotto solaio') {
         const hAlzataSbarco = alzataIn - spessoreLegnoScala;
         const yTopSbarco = numeroPedate * alzataIn;
