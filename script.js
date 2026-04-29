@@ -21,7 +21,6 @@ scene.add(new THREE.GridHelper(5000, 50));
 
 let numeroModuliAttuale = 0;
 
-// Listener per la selezione della pianta scala
 document.getElementById('piantaScala')?.addEventListener('change', (e) => {
     const val = e.target.value;
     if(val === 'Rampa unica') {
@@ -80,7 +79,6 @@ function creaAntaSagomata(xLeft, yBottom, zBack, w, hL, hR, spessore, color) {
     scene.add(line);
 }
 
-// Nuova funzione: Crea poligono per gradino a ventaglio
 function creaPoligonoScala(pts, y, spessore, color) {
     const shape = new THREE.Shape();
     shape.moveTo(pts[0].x, -pts[0].z);
@@ -103,7 +101,7 @@ function creaPoligonoScala(pts, y, spessore, color) {
     scene.add(line);
 }
 
-// Nuova funzione: Crea pannello verticale (alzata chiusa) orientato liberamente tra due punti
+// Funzione migliorata: Calcola la normale per spingere l'alzata esattamente a filo dello scalino superiore
 function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     const dist = Math.hypot(pB.x - pA.x, pB.z - pA.z);
     const angle = Math.atan2(pB.z - pA.z, pB.x - pA.x);
@@ -113,7 +111,14 @@ function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     const mat = new THREE.MeshPhongMaterial({color: color});
     const mesh = new THREE.Mesh(geom, mat);
     
-    mesh.position.set((pA.x + pB.x)/2, yBottom + altezza/2, (pA.z + pB.z)/2);
+    // Calcolo del Vettore Normale (per spingere l'alzata sotto il gradino ed evitare sbavature esterne)
+    let nx = -(pB.z - pA.z) / dist;
+    let nz = (pB.x - pA.x) / dist;
+    
+    let centerX = (pA.x + pB.x)/2 + (nx * spessore / 2);
+    let centerZ = (pA.z + pB.z)/2 + (nz * spessore / 2);
+    
+    mesh.position.set(centerX, yBottom + altezza/2, centerZ);
     mesh.rotation.y = -angle; 
     mesh.name = "pezzoModello";
     scene.add(mesh);
@@ -122,6 +127,31 @@ function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
     line.position.copy(mesh.position);
     line.rotation.y = mesh.rotation.y;
+    line.name = "pezzoModello";
+    scene.add(line);
+}
+
+// Nuova funzione: Crea pannelli strutturali liberi in 3D (utilizzata per i giri e per Rampa 1)
+function creaPannelloSagomato(pts, spessore, color, pos, rotY) {
+    if(pts.length === 0) return;
+    const shape = new THREE.Shape();
+    shape.moveTo(pts[0].x, pts[0].y);
+    for(let i=1; i<pts.length; i++) shape.lineTo(pts[i].x, pts[i].y);
+    shape.closePath();
+    
+    const geom = new THREE.ExtrudeGeometry(shape, { depth: spessore, bevelEnabled: false });
+    const mat = new THREE.MeshPhongMaterial({color: color});
+    const mesh = new THREE.Mesh(geom, mat);
+    
+    mesh.position.copy(pos);
+    mesh.rotation.y = rotY;
+    mesh.name = "pezzoModello";
+    scene.add(mesh);
+    
+    const edges = new THREE.EdgesGeometry(geom, 20);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
+    line.position.copy(pos);
+    line.rotation.y = rotY;
     line.name = "pezzoModello";
     scene.add(line);
 }
@@ -170,7 +200,7 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N2, spessoreFascia, color,
         } else {
             pts.push(new THREE.Vector2(0, Math.min(maxY, topY(0))));
         }
-    } else { // Cremagliera
+    } else { 
         pts.push(new THREE.Vector2(0, Math.max(0, bottomY(0))));
 
         if (xFloorBottom > 0 && xFloorBottom < xEndTotal) {
@@ -206,7 +236,6 @@ function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N2, spessoreFascia, color,
     const extrudeSettings = { depth: spessoreFascia, bevelEnabled: false };
     const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     const material = new THREE.MeshPhongMaterial({ color: color });
-
     const thresholdAngle = 20;
 
     const meshSX = new THREE.Mesh(geometry, material);
@@ -296,7 +325,6 @@ function generaArmadio() {
     const pianta = document.getElementById('piantaScala')?.value || 'Rampa unica';
 
     let N1 = 0, N2 = 0, N_turn = 0;
-    
     if (pianta === 'Rampa unica') {
         N2 = parseInt(document.getElementById('numeroPedate')?.value) || 10;
     } else {
@@ -311,21 +339,14 @@ function generaArmadio() {
     let gradinoInizioIn = parseInt(gradinoInizioInput?.value) || 3;
     const maxGradinoInizio = Math.max(3, N2 - 1);
     
-    if (gradinoInizioIn > maxGradinoInizio) {
-        gradinoInizioIn = maxGradinoInizio;
-        if(gradinoInizioInput) gradinoInizioInput.value = maxGradinoInizio;
-    }
-    if (gradinoInizioIn < 3) {
-        gradinoInizioIn = 3;
-        if(gradinoInizioInput) gradinoInizioInput.value = 3;
-    }
+    if (gradinoInizioIn > maxGradinoInizio) gradinoInizioIn = maxGradinoInizio;
+    if (gradinoInizioIn < 3) gradinoInizioIn = 3;
     if(gradinoInizioInput) gradinoInizioInput.max = maxGradinoInizio;
 
     const colorInt = document.getElementById('coloreInterno')?.value || '#F0ECE1';
     const colorEst = document.getElementById('coloreEsterno')?.value || '#FFFFFF';
     const showAnte = document.getElementById('showAnte')?.checked ?? true;
 
-    // L'armadio è costruito sotto la Rampa 2
     const W_tot_R2 = pedataUltimo + (N2 - 1) * pedataIn;
     const W_armadio = pedataUltimo + (N2 - gradinoInizioIn) * pedataIn;
 
@@ -339,7 +360,6 @@ function generaArmadio() {
     const spessoreSchienale = 5;
     const aria = 3;
 
-    // Altezze dei moduli che salgono col tetto della Rampa 2 (incluso Y_shift)
     let altezzeModuli = [];
     for (let i = 0; i < numeroModuli; i++) {
         let xr = (i + 1) * larghezzaModulo;
@@ -356,7 +376,6 @@ function generaArmadio() {
         const hCorrente = altezzeModuli[i];
         const wInterno = larghezzaModulo - (spessore * 2);
         const numCassetti = parseInt(document.getElementById(`cassetti-mod-${i}`)?.value) || 0;
-        
         const checkboxReggiabiti = document.getElementById(`reggiabiti-mod-${i}`);
         const labelReggiabiti = document.getElementById(`label-reggiabiti-${i}`);
 
@@ -429,11 +448,9 @@ function generaArmadio() {
         startX += larghezzaModulo;
     }
 
-    // --- TAMPONAMENTO TRIANGOLARE VUOTO ---
     if (showAnte && startX < W_tot_R2) {
         const xLeftBuco = startX + (aria / 2);
         const yStartBuco = 8;
-        
         const hLeftBuco = calcolaBottomStrutturaY(xLeftBuco, tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, Y_shift) - 20 - yStartBuco;
         
         if (hLeftBuco > 0) {
@@ -452,9 +469,7 @@ function generaArmadio() {
         }
     }
 
-    // --- TAMPONAMENTO SUPERIORE CONTINUO ---
     const luceArmadio = startX; 
-    
     function getSafeTopY(x) {
         if (x <= pedataUltimo - 5) return N2 * alzataIn - 40.6 - 5 + Y_shift;
         let diff = x + 5 - pedataUltimo;
@@ -463,16 +478,16 @@ function generaArmadio() {
         return (N2 - k) * alzataIn - 40.6 - 5 + Y_shift;
     }
 
-    const pts = [];
-    pts.push(new THREE.Vector2(0, altezzeModuli[0]));
+    const ptsL = [];
+    ptsL.push(new THREE.Vector2(0, altezzeModuli[0]));
     
     for (let i = 0; i < numeroModuli; i++) {
         let x1 = i * larghezzaModulo;
         let x2 = (i + 1) * larghezzaModulo;
         let y = altezzeModuli[i];
-        if (i > 0) pts.push(new THREE.Vector2(x1, altezzeModuli[i - 1]));
-        pts.push(new THREE.Vector2(x1, y));
-        pts.push(new THREE.Vector2(x2, y));
+        if (i > 0) ptsL.push(new THREE.Vector2(x1, altezzeModuli[i - 1]));
+        ptsL.push(new THREE.Vector2(x1, y));
+        ptsL.push(new THREE.Vector2(x2, y));
     }
 
     let changes = [];
@@ -482,38 +497,36 @@ function generaArmadio() {
     }
 
     let last_top_y = getSafeTopY(luceArmadio);
-    pts.push(new THREE.Vector2(luceArmadio, last_top_y));
+    ptsL.push(new THREE.Vector2(luceArmadio, last_top_y));
 
     for (let i = 0; i < changes.length; i++) {
         let cx = changes[i];
-        pts.push(new THREE.Vector2(cx, last_top_y));
+        ptsL.push(new THREE.Vector2(cx, last_top_y));
         let new_y = getSafeTopY(cx - 0.1);
-        pts.push(new THREE.Vector2(cx, new_y));
+        ptsL.push(new THREE.Vector2(cx, new_y));
         last_top_y = new_y;
     }
+    ptsL.push(new THREE.Vector2(0, last_top_y));
 
-    pts.push(new THREE.Vector2(0, last_top_y));
-
-    const shape = new THREE.Shape(pts);
+    const shapeL = new THREE.Shape(ptsL);
     const extrudeSettings = { depth: spessore, bevelEnabled: false };
-    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    const material = new THREE.MeshPhongMaterial({ color: colorInt });
+    const geometryL = new THREE.ExtrudeGeometry(shapeL, extrudeSettings);
+    const materialL = new THREE.MeshPhongMaterial({ color: colorInt });
     
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = "pezzoModello";
-    mesh.position.set(0, 0, profondita - spessore); 
-    scene.add(mesh);
+    const meshL = new THREE.Mesh(geometryL, materialL);
+    meshL.name = "pezzoModello";
+    meshL.position.set(0, 0, profondita - spessore); 
+    scene.add(meshL);
     
-    const edges = new THREE.EdgesGeometry(geometry, 20); 
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
-    line.name = "pezzoModello";
-    line.position.set(0, 0, profondita - spessore);
-    scene.add(line);
+    const edgesL = new THREE.EdgesGeometry(geometryL, 20); 
+    const lineL = new THREE.LineSegments(edgesL, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
+    lineL.name = "pezzoModello";
+    lineL.position.set(0, 0, profondita - spessore);
+    scene.add(lineL);
 
-    // --- COSTRUZIONE FASCIA STRUTTURA LATERALE (Rampa 2) ---
+    // --- STRUTTURA LATERALE RAMPA 2 ---
     creaFasciaStruttura(tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, 8, colorEst, tipoSbarco, Y_shift);
 
-    // --- COSTRUZIONE RAMPA 2 (Legno) ---
     const spessoreLegnoScala = 40.6;
     const coloreScala = 0x966F33; 
     
@@ -541,7 +554,7 @@ function generaArmadio() {
         creaPannello(spessoreLegnoScala, hAlzataSbarco, profondita, spessoreLegnoScala/2, yTopSbarco + hAlzataSbarco/2, profondita/2, coloreScala);
     }
 
-    // --- COSTRUZIONE TURN E RAMPA 1 IN 3D ---
+    // --- STRUTTURE PER GIRO E RAMPA 1 IN 3D ---
     if (pianta !== 'Rampa unica') {
         const p0 = {x: W_tot_R2, z: 560};
         const p1 = {x: W_tot_R2, z: 0};
@@ -552,29 +565,147 @@ function generaArmadio() {
         const p6 = {x: W_tot_R2 + 40, z: 600};
         const pivot = {x: W_tot_R2 + 40, z: 560};
 
-        // Piantone centrale quadrato
+        // Piantone centrale
         creaPannello(40, Y_shift, 40, W_tot_R2 + 20, Y_shift/2, 580, coloreScala);
 
         if (pianta === 'Giro con 3 ventagli') {
-            // W1 (Top)
             creaPoligonoScala([p1, p2, pivot, p0], Y_shift - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
             creaAlzataPunti(p2, pivot, Y_shift - alzataIn, Y_shift - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
-            // W2 (Middle)
+            
             creaPoligonoScala([p2, p3, p4, pivot], Y_shift - alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
             creaAlzataPunti(p4, pivot, Y_shift - 2*alzataIn, Y_shift - alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
-            // W3 (Bottom)
+            
             creaPoligonoScala([p4, p5, p6, pivot], Y_shift - 2*alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
             creaAlzataPunti(p5, p6, Y_shift - 3*alzataIn, Y_shift - 2*alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
         } else {
-            // W1 (Top)
             creaPoligonoScala([p1, p3, pivot, p0], Y_shift - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
             creaAlzataPunti(p3, pivot, Y_shift - alzataIn, Y_shift - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
-            // W2 (Bottom)
+            
             creaPoligonoScala([p3, p5, p6, pivot], Y_shift - alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
             creaAlzataPunti(p5, p6, Y_shift - 2*alzataIn, Y_shift - alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
         }
 
-        // Costruzione Rampa 1 verso l'esterno (+Z)
+        // COSTRUZIONE FASCE STRUTTURALI (Giro + Rampa 1)
+        const m = -alzataIn / pedataIn;
+        const theta = Math.atan(alzataIn / pedataIn);
+        const offsetTop = 20 / Math.cos(theta);
+        
+        // Pannello A (Muro Posteriore Giro)
+        let ptsA = [];
+        let lenA = 608 - 40.6;
+        let bottomY_start_A = calcolaBottomStrutturaY(W_tot_R2 + 40.6, tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, Y_shift);
+        let bottomY_end_A = bottomY_start_A + m * lenA;
+        ptsA.push({x: 0, y: Math.max(0, bottomY_start_A)});
+        ptsA.push({x: lenA, y: Math.max(0, bottomY_end_A)});
+        
+        let topY_start_A, topY_end_A;
+        if (tipoStruttura === 'Lineare') {
+            const q_noses = -m * (pedataUltimo + 40.6) + N2 * alzataIn + Y_shift;
+            topY_start_A = m * (W_tot_R2 + 40.6) + q_noses + offsetTop;
+            topY_end_A = topY_start_A + m * lenA;
+            ptsA.push({x: lenA, y: topY_end_A});
+            ptsA.push({x: 0, y: topY_start_A});
+        } else {
+            topY_start_A = Y_shift;
+            topY_end_A = Y_shift;
+            ptsA.push({x: lenA, y: Y_shift});
+            ptsA.push({x: 0, y: Y_shift});
+        }
+        creaPannelloSagomato(ptsA, 8, colorEst, new THREE.Vector3(W_tot_R2 + 40.6, 0, -8), 0);
+
+        // Pannello B (Muro Laterale Giro)
+        let ptsB = [];
+        let endY_B = bottomY_end_A + m * 600;
+        ptsB.push({x: 0, y: Math.max(0, bottomY_end_A)});
+        ptsB.push({x: 600, y: Math.max(0, endY_B)});
+        
+        let topY_end_B;
+        if (tipoStruttura === 'Lineare') {
+            topY_end_B = topY_end_A + m * 600;
+            ptsB.push({x: 600, y: topY_end_B});
+            ptsB.push({x: 0, y: topY_end_A});
+        } else {
+            if (pianta === 'Giro con 3 ventagli') {
+                ptsB.push({x: 600, y: Y_shift - 2*alzataIn});
+                ptsB.push({x: 200, y: Y_shift - 2*alzataIn});
+                ptsB.push({x: 200, y: Y_shift - alzataIn});
+                ptsB.push({x: 0, y: Y_shift - alzataIn});
+                topY_end_B = Y_shift - 2*alzataIn;
+            } else {
+                ptsB.push({x: 600, y: Y_shift - alzataIn});
+                ptsB.push({x: 0, y: Y_shift - alzataIn});
+                topY_end_B = Y_shift - alzataIn;
+            }
+        }
+        creaPannelloSagomato(ptsB, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 0), -Math.PI/2);
+
+        // Fascia Esterna DX Rampa 1
+        let ptsR1 = [];
+        let xEndTotal_R1 = N1 * pedataIn + 40.6;
+        let bottomY_end_R1 = endY_B + m * xEndTotal_R1;
+        ptsR1.push({x: 0, y: Math.max(0, endY_B)});
+        
+        if (bottomY_end_R1 < 0) {
+            ptsR1.push({x: -endY_B / m, y: 0});
+            ptsR1.push({x: xEndTotal_R1, y: 0});
+        } else {
+            ptsR1.push({x: xEndTotal_R1, y: bottomY_end_R1});
+        }
+        
+        if (tipoStruttura === 'Lineare') {
+            ptsR1.push({x: xEndTotal_R1, y: Math.max(0, topY_end_B + m * xEndTotal_R1)});
+            ptsR1.push({x: 0, y: topY_end_B});
+        } else {
+            ptsR1.push({x: xEndTotal_R1, y: Math.max(0, alzataIn)});
+            for (let k = N1 - 1; k >= 0; k--) {
+                let y_top = (N1 - k) * alzataIn;
+                let x_r_front = (k === 0) ? 40.6 : (k - 1) * pedataIn + 40.6 + pedataIn;
+                if (k > 0) {
+                    ptsR1.push({x: x_r_front, y: y_top});
+                    ptsR1.push({x: x_r_front, y: (N1 - (k - 1)) * alzataIn});
+                } else {
+                    ptsR1.push({x: x_r_front, y: y_top});
+                    ptsR1.push({x: 0, y: y_top});
+                }
+            }
+        }
+        creaPannelloSagomato(ptsR1, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 600), -Math.PI/2);
+
+        // Fascia Interna SX Rampa 1
+        let ptsR1_in = [];
+        let startY_in = calcolaBottomStrutturaY(W_tot_R2, tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, Y_shift);
+        let bottomY_end_R1_in = startY_in + m * xEndTotal_R1;
+        ptsR1_in.push({x: 0, y: Math.max(0, startY_in)});
+        
+        if (bottomY_end_R1_in < 0) {
+            ptsR1_in.push({x: -startY_in / m, y: 0});
+            ptsR1_in.push({x: xEndTotal_R1, y: 0});
+        } else {
+            ptsR1_in.push({x: xEndTotal_R1, y: bottomY_end_R1_in});
+        }
+        
+        if (tipoStruttura === 'Lineare') {
+            const q_noses = -m * (pedataUltimo + 40.6) + N2 * alzataIn + Y_shift;
+            let topY_in = m * W_tot_R2 + q_noses + offsetTop;
+            ptsR1_in.push({x: xEndTotal_R1, y: Math.max(0, topY_in + m * xEndTotal_R1)});
+            ptsR1_in.push({x: 0, y: topY_in});
+        } else {
+            ptsR1_in.push({x: xEndTotal_R1, y: Math.max(0, alzataIn)});
+            for (let k = N1 - 1; k >= 0; k--) {
+                let y_top = (N1 - k) * alzataIn;
+                let x_r_front = (k === 0) ? 40.6 : (k - 1) * pedataIn + 40.6 + pedataIn;
+                if (k > 0) {
+                    ptsR1_in.push({x: x_r_front, y: y_top});
+                    ptsR1_in.push({x: x_r_front, y: (N1 - (k - 1)) * alzataIn});
+                } else {
+                    ptsR1_in.push({x: x_r_front, y: y_top});
+                    ptsR1_in.push({x: 0, y: y_top});
+                }
+            }
+        }
+        creaPannelloSagomato(ptsR1_in, 8, colorEst, new THREE.Vector3(W_tot_R2, 0, 600), -Math.PI/2);
+
+        // Gradini Rampa 1 in legno
         for (let j = 0; j < N1; j++) {
             const quotaY = (N1 - j) * alzataIn - spessoreLegnoScala;
             const quotaZ = 600 - spessoreLegnoScala/2 + j * pedataIn;
