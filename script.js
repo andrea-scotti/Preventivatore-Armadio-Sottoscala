@@ -101,7 +101,6 @@ function creaPoligonoScala(pts, y, spessore, color) {
     scene.add(line);
 }
 
-// Funzione migliorata: Calcola la normale per spingere l'alzata esattamente a filo dello scalino superiore
 function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     const dist = Math.hypot(pB.x - pA.x, pB.z - pA.z);
     const angle = Math.atan2(pB.z - pA.z, pB.x - pA.x);
@@ -111,7 +110,6 @@ function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     const mat = new THREE.MeshPhongMaterial({color: color});
     const mesh = new THREE.Mesh(geom, mat);
     
-    // Calcolo del Vettore Normale (per spingere l'alzata sotto il gradino ed evitare sbavature esterne)
     let nx = -(pB.z - pA.z) / dist;
     let nz = (pB.x - pA.x) / dist;
     
@@ -131,29 +129,59 @@ function creaAlzataPunti(pA, pB, yBottom, yTop, spessore, color) {
     scene.add(line);
 }
 
-// Nuova funzione: Crea pannelli strutturali liberi in 3D (utilizzata per i giri e per Rampa 1)
-function creaPannelloSagomato(pts, spessore, color, pos, rotY) {
-    if(pts.length === 0) return;
-    const shape = new THREE.Shape();
-    shape.moveTo(pts[0].x, pts[0].y);
-    for(let i=1; i<pts.length; i++) shape.lineTo(pts[i].x, pts[i].y);
-    shape.closePath();
-    
+function creaPannelloDaShape(shape, spessore, color, pos, rotY) {
     const geom = new THREE.ExtrudeGeometry(shape, { depth: spessore, bevelEnabled: false });
     const mat = new THREE.MeshPhongMaterial({color: color});
     const mesh = new THREE.Mesh(geom, mat);
-    
     mesh.position.copy(pos);
     mesh.rotation.y = rotY;
     mesh.name = "pezzoModello";
     scene.add(mesh);
-    
+
     const edges = new THREE.EdgesGeometry(geom, 20);
     const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2 }));
     line.position.copy(pos);
     line.rotation.y = rotY;
     line.name = "pezzoModello";
     scene.add(line);
+}
+
+// Nuova logica per creare pannelli strutturali continui partendo dai punti esatti delle pedate
+function buildContinuousPanel(treads, tipo, m, offsetTop, startY_bottom, startY_top) {
+    let pts = [];
+    let N = treads.length;
+    let startX = treads[0].startU;
+    let endX = treads[N-1].endU;
+    let len = endX - startX;
+
+    let endY_bottom = startY_bottom + m * len;
+    let endY_top = startY_top + m * len;
+
+    const bottomY = (x) => startY_bottom + m * (x - startX);
+    const topY = (x) => startY_top + m * (x - startX);
+
+    pts.push(new THREE.Vector2(startX, Math.max(0, startY_bottom)));
+
+    let xFloor = startX + (0 - startY_bottom) / m;
+    if (xFloor > startX && xFloor < endX) {
+        pts.push(new THREE.Vector2(xFloor, 0));
+        pts.push(new THREE.Vector2(endX, 0));
+    } else {
+        pts.push(new THREE.Vector2(endX, Math.max(0, endY_bottom)));
+    }
+
+    if (tipo === 'Lineare') {
+        pts.push(new THREE.Vector2(endX, Math.max(0, endY_top)));
+        pts.push(new THREE.Vector2(startX, Math.max(0, startY_top)));
+    } else {
+        pts.push(new THREE.Vector2(endX, Math.max(0, treads[N-1].y)));
+        for (let i = N - 1; i >= 0; i--) {
+            pts.push(new THREE.Vector2(treads[i].endU, Math.max(0, treads[i].y)));
+            pts.push(new THREE.Vector2(treads[i].startU, Math.max(0, treads[i].y)));
+        }
+    }
+
+    return { shape: new THREE.Shape(pts), nextY_bottom: endY_bottom, nextY_top: endY_top };
 }
 
 function calcolaBottomStrutturaY(x, tipo, pIn, pUltimo, aIn, N2, Y_shift = 0) {
@@ -164,10 +192,9 @@ function calcolaBottomStrutturaY(x, tipo, pIn, pUltimo, aIn, N2, Y_shift = 0) {
     return lineY - offsetBottom;
 }
 
-function creaFasciaStruttura(tipo, pIn, pUltimo, aIn, N2, spessoreFascia, color, tipoSbarco, Y_shift = 0) {
+function creaFasciaStrutturaR2(tipo, pIn, pUltimo, aIn, N2, spessoreFascia, color, tipoSbarco, Y_shift = 0) {
     const m = -aIn / pIn;
     const theta = Math.atan(aIn / pIn);
-    
     const offsetBottom = (tipo === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
     const bottomY = (x) => m * (x - pUltimo) + (N2 - 1) * aIn - 40.6 + Y_shift - offsetBottom;
 
@@ -525,7 +552,7 @@ function generaArmadio() {
     scene.add(lineL);
 
     // --- STRUTTURA LATERALE RAMPA 2 ---
-    creaFasciaStruttura(tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, 8, colorEst, tipoSbarco, Y_shift);
+    creaFasciaStrutturaR2(tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, 8, colorEst, tipoSbarco, Y_shift);
 
     const spessoreLegnoScala = 40.6;
     const coloreScala = 0x966F33; 
@@ -585,140 +612,71 @@ function generaArmadio() {
             creaAlzataPunti(p5, p6, Y_shift - 2*alzataIn, Y_shift - alzataIn - spessoreLegnoScala, spessoreLegnoScala, coloreScala);
         }
 
-        // COSTRUZIONE FASCE STRUTTURALI (Giro + Rampa 1)
+        // --- CALCOLO ESATTO DELLE FASCE STRUTTURALI (Giro + Rampa 1) ---
         const m = -alzataIn / pedataIn;
         const theta = Math.atan(alzataIn / pedataIn);
+        const offsetBottom = (tipoStruttura === 'Cremagliera') ? (120 / Math.cos(theta)) : (15 / Math.cos(theta));
         const offsetTop = 20 / Math.cos(theta);
-        
-        // Pannello A (Muro Posteriore Giro)
-        let ptsA = [];
-        let lenA = 608 - 40.6;
-        let bottomY_start_A = calcolaBottomStrutturaY(W_tot_R2 + 40.6, tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, Y_shift);
-        let bottomY_end_A = bottomY_start_A + m * lenA;
-        ptsA.push({x: 0, y: Math.max(0, bottomY_start_A)});
-        ptsA.push({x: lenA, y: Math.max(0, bottomY_end_A)});
-        
-        let topY_start_A, topY_end_A;
-        if (tipoStruttura === 'Lineare') {
-            const q_noses = -m * (pedataUltimo + 40.6) + N2 * alzataIn + Y_shift;
-            topY_start_A = m * (W_tot_R2 + 40.6) + q_noses + offsetTop;
-            topY_end_A = topY_start_A + m * lenA;
-            ptsA.push({x: lenA, y: topY_end_A});
-            ptsA.push({x: 0, y: topY_start_A});
-        } else {
-            topY_start_A = Y_shift;
-            topY_end_A = Y_shift;
-            ptsA.push({x: lenA, y: Y_shift});
-            ptsA.push({x: 0, y: Y_shift});
-        }
-        creaPannelloSagomato(ptsA, 8, colorEst, new THREE.Vector3(W_tot_R2 + 40.6, 0, -8), 0);
 
-        // Pannello B (Muro Laterale Giro)
-        let ptsB = [];
-        let endY_B = bottomY_end_A + m * 600;
-        ptsB.push({x: 0, y: Math.max(0, bottomY_end_A)});
-        ptsB.push({x: 600, y: Math.max(0, endY_B)});
-        
-        let topY_end_B;
-        if (tipoStruttura === 'Lineare') {
-            topY_end_B = topY_end_A + m * 600;
-            ptsB.push({x: 600, y: topY_end_B});
-            ptsB.push({x: 0, y: topY_end_A});
-        } else {
-            if (pianta === 'Giro con 3 ventagli') {
-                ptsB.push({x: 600, y: Y_shift - 2*alzataIn});
-                ptsB.push({x: 200, y: Y_shift - 2*alzataIn});
-                ptsB.push({x: 200, y: Y_shift - alzataIn});
-                ptsB.push({x: 0, y: Y_shift - alzataIn});
-                topY_end_B = Y_shift - 2*alzataIn;
-            } else {
-                ptsB.push({x: 600, y: Y_shift - alzataIn});
-                ptsB.push({x: 0, y: Y_shift - alzataIn});
-                topY_end_B = Y_shift - alzataIn;
-            }
-        }
-        creaPannelloSagomato(ptsB, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 0), -Math.PI/2);
+        // Collegamento perfetto dal fondo di Rampa 2
+        let startY_bottom = Y_shift - 40.6 - offsetBottom;
+        let startY_top = Y_shift + offsetTop;
 
-        // Fascia Esterna DX Rampa 1
-        let ptsR1 = [];
-        let xEndTotal_R1 = N1 * pedataIn + 40.6;
-        let bottomY_end_R1 = endY_B + m * xEndTotal_R1;
-        ptsR1.push({x: 0, y: Math.max(0, endY_B)});
-        
-        if (bottomY_end_R1 < 0) {
-            ptsR1.push({x: -endY_B / m, y: 0});
-            ptsR1.push({x: xEndTotal_R1, y: 0});
+        // Tracciamento dei limiti fisici esatti delle pedate
+        let treadsTurnA = [];
+        if (pianta === 'Giro con 3 ventagli') {
+            treadsTurnA.push({ startU: 0, endU: 359.4, y: Y_shift });
+            treadsTurnA.push({ startU: 359.4, endU: 559.4, y: Y_shift - alzataIn });
         } else {
-            ptsR1.push({x: xEndTotal_R1, y: bottomY_end_R1});
+            treadsTurnA.push({ startU: 0, endU: 559.4, y: Y_shift });
         }
-        
-        if (tipoStruttura === 'Lineare') {
-            ptsR1.push({x: xEndTotal_R1, y: Math.max(0, topY_end_B + m * xEndTotal_R1)});
-            ptsR1.push({x: 0, y: topY_end_B});
-        } else {
-            ptsR1.push({x: xEndTotal_R1, y: Math.max(0, alzataIn)});
-            for (let k = N1 - 1; k >= 0; k--) {
-                let y_top = (N1 - k) * alzataIn;
-                let x_r_front = (k === 0) ? 40.6 : (k - 1) * pedataIn + 40.6 + pedataIn;
-                if (k > 0) {
-                    ptsR1.push({x: x_r_front, y: y_top});
-                    ptsR1.push({x: x_r_front, y: (N1 - (k - 1)) * alzataIn});
-                } else {
-                    ptsR1.push({x: x_r_front, y: y_top});
-                    ptsR1.push({x: 0, y: y_top});
-                }
-            }
-        }
-        creaPannelloSagomato(ptsR1, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 600), -Math.PI/2);
 
-        // Fascia Interna SX Rampa 1
-        let ptsR1_in = [];
-        let startY_in = calcolaBottomStrutturaY(W_tot_R2, tipoStruttura, pedataIn, pedataUltimo, alzataIn, N2, Y_shift);
-        let bottomY_end_R1_in = startY_in + m * xEndTotal_R1;
-        ptsR1_in.push({x: 0, y: Math.max(0, startY_in)});
-        
-        if (bottomY_end_R1_in < 0) {
-            ptsR1_in.push({x: -startY_in / m, y: 0});
-            ptsR1_in.push({x: xEndTotal_R1, y: 0});
+        let treadsTurnB = [];
+        if (pianta === 'Giro con 3 ventagli') {
+            treadsTurnB.push({ startU: 0, endU: 200, y: Y_shift - alzataIn });
+            treadsTurnB.push({ startU: 200, endU: 600, y: Y_shift - 2*alzataIn });
         } else {
-            ptsR1_in.push({x: xEndTotal_R1, y: bottomY_end_R1_in});
+            treadsTurnB.push({ startU: 0, endU: 600, y: Y_shift - alzataIn });
         }
-        
-        if (tipoStruttura === 'Lineare') {
-            const q_noses = -m * (pedataUltimo + 40.6) + N2 * alzataIn + Y_shift;
-            let topY_in = m * W_tot_R2 + q_noses + offsetTop;
-            ptsR1_in.push({x: xEndTotal_R1, y: Math.max(0, topY_in + m * xEndTotal_R1)});
-            ptsR1_in.push({x: 0, y: topY_in});
-        } else {
-            ptsR1_in.push({x: xEndTotal_R1, y: Math.max(0, alzataIn)});
-            for (let k = N1 - 1; k >= 0; k--) {
-                let y_top = (N1 - k) * alzataIn;
-                let x_r_front = (k === 0) ? 40.6 : (k - 1) * pedataIn + 40.6 + pedataIn;
-                if (k > 0) {
-                    ptsR1_in.push({x: x_r_front, y: y_top});
-                    ptsR1_in.push({x: x_r_front, y: (N1 - (k - 1)) * alzataIn});
-                } else {
-                    ptsR1_in.push({x: x_r_front, y: y_top});
-                    ptsR1_in.push({x: 0, y: y_top});
-                }
-            }
-        }
-        creaPannelloSagomato(ptsR1_in, 8, colorEst, new THREE.Vector3(W_tot_R2, 0, 600), -Math.PI/2);
 
-        // Gradini Rampa 1 in legno
+        let treadsR1 = [];
+        for(let j=0; j<N1; j++) {
+            let startU = (j === 0) ? 0 : 40.6 + j * pedataIn;
+            let endU = 40.6 + (j+1) * pedataIn;
+            let y = (N1 - j) * alzataIn;
+            treadsR1.push({ startU, endU, y });
+        }
+
+        // Generazione Continua Pannelli
+        let resA = buildContinuousPanel(treadsTurnA, tipoStruttura, m, offsetTop, startY_bottom, startY_top);
+        creaPannelloDaShape(resA.shape, 8, colorEst, new THREE.Vector3(W_tot_R2 + 40.6, 0, -8), 0);
+
+        let resB = buildContinuousPanel(treadsTurnB, tipoStruttura, m, offsetTop, resA.nextY_bottom, resA.nextY_top);
+        creaPannelloDaShape(resB.shape, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 0), -Math.PI/2);
+
+        let resR1_ext = buildContinuousPanel(treadsR1, tipoStruttura, m, offsetTop, resB.nextY_bottom, resB.nextY_top);
+        creaPannelloDaShape(resR1_ext.shape, 8, colorEst, new THREE.Vector3(W_tot_R2 + 608, 0, 600), -Math.PI/2);
+
+        let resR1_int = buildContinuousPanel(treadsR1, tipoStruttura, m, offsetTop, startY_bottom, startY_top);
+        creaPannelloDaShape(resR1_int.shape, 8, colorEst, new THREE.Vector3(W_tot_R2, 0, 600), -Math.PI/2);
+
+        // Legno Rampa 1 aggiornato sulle stesse esatte coordinate "start/end"
         for (let j = 0; j < N1; j++) {
-            const quotaY = (N1 - j) * alzataIn - spessoreLegnoScala;
-            const quotaZ = 600 - spessoreLegnoScala/2 + j * pedataIn;
-            const wPedata1 = pedataIn + spessoreLegnoScala;
-            
-            creaPannello(600, spessoreLegnoScala, wPedata1, W_tot_R2 + 300, quotaY + spessoreLegnoScala/2, quotaZ + wPedata1/2, coloreScala);
-            
+            let yTop = (N1 - j) * alzataIn;
+            let uStart = (j === 0) ? 0 : 40.6 + j * pedataIn;
+            let uEnd = 40.6 + (j+1) * pedataIn;
+            let wTread = uEnd - uStart;
+            let zCenter = 600 + uStart + wTread/2;
+            creaPannello(600, 40.6, wTread, W_tot_R2 + 300, yTop - 40.6/2, zCenter, coloreScala);
+
             if (j < N1 - 1) {
-                const hAlz = alzataIn - spessoreLegnoScala;
-                creaPannello(600, hAlz, spessoreLegnoScala, W_tot_R2 + 300, quotaY - hAlz/2, quotaZ + wPedata1 - spessoreLegnoScala/2, coloreScala);
+                let hAlz = alzataIn - 40.6;
+                let zRiserCenter = 600 + uEnd - 40.6/2;
+                creaPannello(600, hAlz, 40.6, W_tot_R2 + 300, yTop - 40.6 - hAlz/2, zRiserCenter, coloreScala);
             } else {
-                const hAlz = alzataIn - spessoreLegnoScala;
-                creaPannello(600, hAlz, spessoreLegnoScala, W_tot_R2 + 300, hAlz/2, quotaZ + wPedata1 - spessoreLegnoScala/2, coloreScala);
+                let hAlz = alzataIn - 40.6;
+                let zRiserCenter = 600 + uEnd - 40.6/2;
+                creaPannello(600, hAlz, 40.6, W_tot_R2 + 300, hAlz/2, zRiserCenter, coloreScala);
             }
         }
     }
