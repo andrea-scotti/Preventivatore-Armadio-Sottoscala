@@ -37,6 +37,14 @@
                     </select>
                 </div>
                 <div class="input-group">
+                    <label>Pianta scala</label>
+                    <select id="piantaScala">
+                        <option value="Rampa unica" selected>Rampa unica</option>
+                        <option value="Giro con 2 ventagli">Giro con 2 ventagli</option>
+                        <option value="Giro con 3 ventagli">Giro con 3 ventagli</option>
+                    </select>
+                </div>
+                <div class="input-group">
                     <label>Pedata (mm)</label>
                     <input type="number" id="pedata" value="250" min="190" max="280" step="10">
                 </div>
@@ -48,12 +56,22 @@
                     <label>Alzata (mm)</label>
                     <input type="number" id="alzata" value="180">
                 </div>
-                <div class="input-group">
+                
+                <div class="input-group" id="grp-pedate-totali">
                     <label>N° pedate (Totali)</label>
                     <input type="number" id="numeroPedate" value="10" min="4" max="20" step="1">
                 </div>
+                <div class="input-group" id="grp-pedate-1" style="display:none;">
+                    <label>Pedate Rampa 1 (Partenza dal basso)</label>
+                    <input type="number" id="pedateRampa1" value="3" min="0" max="20" step="1">
+                </div>
+                <div class="input-group" id="grp-pedate-2" style="display:none;">
+                    <label>Pedate Rampa 2 (Arrivo in alto)</label>
+                    <input type="number" id="pedateRampa2" value="7" min="2" max="20" step="1">
+                </div>
+
                 <div class="input-group">
-                    <label>Gradino di inizio armadio (dal basso)</label>
+                    <label>Gradino di inizio armadio</label>
                     <input type="number" id="gradinoInizio" value="3" min="3" step="1">
                 </div>
             </section>
